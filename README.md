@@ -245,6 +245,37 @@ To run the example application locally:
 
 The development server will hot-reload as you make changes to the source code in the `src/` directory.
 
+## Deployment
+
+### Azure Web App Deployment
+
+This repository includes a GitHub Actions workflow for automatic deployment to Azure Web App. The workflow uses **Bicep** (Infrastructure as Code) to automatically provision Azure resources.
+
+**Features:**
+- Automatic infrastructure provisioning using Bicep
+- Build, test, and deployment automation
+- Node.js 22 LTS on Linux
+- Secure service principal authentication
+
+#### Quick Setup
+
+1. **Create Azure Service Principal**:
+   ```bash
+   az ad sp create-for-rbac --name "simple-react-router-deploy" \
+     --role contributor --scopes /subscriptions/{subscription-id} --sdk-auth
+   ```
+
+2. **Configure GitHub Secrets**:
+   - `AZURE_CREDENTIALS`: Full JSON output from step 1
+   - `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID
+   - `AZURE_RESOURCE_GROUP`: Resource group name (e.g., `simple-react-router-rg`)
+
+3. **Deploy**:
+   - Push to `main` branch or manually trigger the workflow
+   - Infrastructure and application will be deployed automatically
+
+For detailed setup instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## License
 
 MIT
