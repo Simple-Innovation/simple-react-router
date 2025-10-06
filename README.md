@@ -249,36 +249,32 @@ The development server will hot-reload as you make changes to the source code in
 
 ### Azure Web App Deployment
 
-This repository includes a GitHub Actions workflow for automatic deployment to Azure Web App. The workflow is configured to:
+This repository includes a GitHub Actions workflow for automatic deployment to Azure Web App. The workflow uses **Bicep** (Infrastructure as Code) to automatically provision Azure resources.
 
-1. Build and test the library
-2. Build the demo application for production
-3. Deploy to Azure Web App on every push to the `main` branch
+**Features:**
+- Automatic infrastructure provisioning using Bicep
+- Build, test, and deployment automation
+- Node.js 22 LTS on Linux
+- Secure service principal authentication
 
-#### Setup Instructions
+#### Quick Setup
 
-1. **Create an Azure Web App**:
-   - Go to [Azure Portal](https://portal.azure.com)
-   - Create a new Web App (choose Node.js 22 LTS runtime on Linux)
-   - Note down your app name
+1. **Create Azure Service Principal**:
+   ```bash
+   az ad sp create-for-rbac --name "simple-react-router-deploy" \
+     --role contributor --scopes /subscriptions/{subscription-id} --sdk-auth
+   ```
 
 2. **Configure GitHub Secrets**:
-   - In your Azure Web App, go to the "Overview" page
-   - Click "Download publish profile" from the top menu
-   - Copy the contents of the downloaded file
-   - In your GitHub repository, go to Settings > Secrets and variables > Actions
-   - Create a new repository secret named `AZURE_WEBAPP_PUBLISH_PROFILE`
-   - Paste the publish profile contents as the value
+   - `AZURE_CREDENTIALS`: Full JSON output from step 1
+   - `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID
+   - `AZURE_RESOURCE_GROUP`: Resource group name (e.g., `simple-react-router-rg`)
 
-3. **Update Workflow Configuration**:
-   - Edit `.github/workflows/azure-webapps-deploy.yml`
-   - Update the `AZURE_WEBAPP_NAME` environment variable with your Azure Web App name
+3. **Deploy**:
+   - Push to `main` branch or manually trigger the workflow
+   - Infrastructure and application will be deployed automatically
 
-4. **Deploy**:
-   - Push to the `main` branch or manually trigger the workflow
-   - The demo application will be automatically deployed to your Azure Web App
-
-The workflow includes web.config for proper SPA routing support on Azure App Service.
+For detailed setup instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## License
 
