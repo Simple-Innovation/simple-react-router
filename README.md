@@ -228,6 +228,23 @@ function UserProfile() {
 }
 ```
 
+## Local Development
+
+To run the example application locally:
+
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+4. Open your browser to `http://localhost:3000`
+
+The development server will hot-reload as you make changes to the source code in the `src/` directory.
+
 ## License
 
 MIT
