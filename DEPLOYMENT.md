@@ -19,8 +19,8 @@ This guide explains how to deploy the Simple React Router demo application to Az
    - **Resource Group**: Create new or use existing
    - **Name**: Choose a unique name (e.g., `simple-react-router-demo`)
    - **Publish**: Code
-   - **Runtime stack**: Node 20 LTS
-   - **Operating System**: Linux or Windows
+   - **Runtime stack**: Node 22 LTS
+   - **Operating System**: Linux
    - **Region**: Choose your preferred region
 4. Choose an appropriate pricing plan (Free tier works for testing)
 5. Click "Review + create" and then "Create"
@@ -51,7 +51,7 @@ This guide explains how to deploy the Simple React Router demo application to Az
    env:
      AZURE_WEBAPP_NAME: your-webapp-name    # Change this to your app name
      AZURE_WEBAPP_PACKAGE_PATH: 'dev/dist'
-     NODE_VERSION: '20.x'
+     NODE_VERSION: '22.x'
    ```
 4. Commit and push the changes
 
@@ -87,7 +87,7 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 
 ### Build Job
 - Checks out the code
-- Sets up Node.js 20.x
+- Sets up Node.js 22.x
 - Installs dependencies
 - Runs tests to ensure code quality
 - Builds the TypeScript library
@@ -143,7 +143,7 @@ npx serve dev/dist
 Update the `NODE_VERSION` environment variable in the workflow file:
 ```yaml
 env:
-  NODE_VERSION: '18.x'  # or '20.x', '22.x'
+  NODE_VERSION: '22.x'  # or '18.x', '20.x'
 ```
 
 ### Change Build Output Path

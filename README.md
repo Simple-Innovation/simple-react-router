@@ -259,7 +259,7 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 
 1. **Create an Azure Web App**:
    - Go to [Azure Portal](https://portal.azure.com)
-   - Create a new Web App (choose Node.js runtime)
+   - Create a new Web App (choose Node.js 22 LTS runtime on Linux)
    - Note down your app name
 
 2. **Configure GitHub Secrets**:
