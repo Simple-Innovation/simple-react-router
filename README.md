@@ -245,6 +245,41 @@ To run the example application locally:
 
 The development server will hot-reload as you make changes to the source code in the `src/` directory.
 
+## Deployment
+
+### Azure Web App Deployment
+
+This repository includes a GitHub Actions workflow for automatic deployment to Azure Web App. The workflow is configured to:
+
+1. Build and test the library
+2. Build the demo application for production
+3. Deploy to Azure Web App on every push to the `main` branch
+
+#### Setup Instructions
+
+1. **Create an Azure Web App**:
+   - Go to [Azure Portal](https://portal.azure.com)
+   - Create a new Web App (choose Node.js runtime)
+   - Note down your app name
+
+2. **Configure GitHub Secrets**:
+   - In your Azure Web App, go to the "Overview" page
+   - Click "Download publish profile" from the top menu
+   - Copy the contents of the downloaded file
+   - In your GitHub repository, go to Settings > Secrets and variables > Actions
+   - Create a new repository secret named `AZURE_WEBAPP_PUBLISH_PROFILE`
+   - Paste the publish profile contents as the value
+
+3. **Update Workflow Configuration**:
+   - Edit `.github/workflows/azure-webapps-deploy.yml`
+   - Update the `AZURE_WEBAPP_NAME` environment variable with your Azure Web App name
+
+4. **Deploy**:
+   - Push to the `main` branch or manually trigger the workflow
+   - The demo application will be automatically deployed to your Azure Web App
+
+The workflow includes web.config for proper SPA routing support on Azure App Service.
+
 ## License
 
 MIT
