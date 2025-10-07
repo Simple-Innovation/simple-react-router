@@ -9,8 +9,8 @@
 #
 # 2. Create the following secrets and repository variables in your repository (Settings > Secrets and variables > Actions):
 #    - AZURE_CREDENTIALS (secret): The entire JSON output from step 1
-#    - AZURE_SUBSCRIPTION_ID (secret or repository Variable): Your Azure subscription ID
-#    - AZURE_RESOURCE_GROUP (repository Variable): Name of the resource group to create/use (e.g., 'simple-react-router-rg')
+#    - AZURE_SUBSCRIPTION_ID (repository Variable): Your Azure subscription ID
+#    - AZURE_RESOURCE_GROUP_NAME (repository Variable): Name of the resource group to create/use (e.g., 'simple-react-router-rg')
 #
 # 3. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
 #
@@ -30,7 +30,8 @@ env:
   # Read the web app name from a GitHub repository variable named `AZURE_WEBAPP_NAME`.
   # If the variable is not set, fall back to a default with a clear suffix to reduce naming collisions.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
-  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router-webapp' }}
+  # Require the repository Variable AZURE_WEBAPP_NAME to be set (no workflow default).
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
   AZURE_WEBAPP_PACKAGE_PATH: "dev/dist" # set this to the path to your web app project, defaults to the repository root
   NODE_VERSION: "22.x" # set this to the node version to use
   # Read the Azure region from a GitHub repository variable named `AZURE_LOCATION`.
@@ -41,11 +42,13 @@ env:
   # If the variable is not set, fall back to 'F1'.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
   APP_SERVICE_PLAN_SKU: ${{ vars.APP_SERVICE_PLAN_SKU || 'F1' }} # App Service Plan SKU (F1=Free, B1=Basic, S1=Standard)
-  # Read subscription id from repository variable first, otherwise fall back to the secret.
-  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
-  # Read the Resource Group name from a repository variable named `AZURE_RESOURCE_GROUP`.
+  # Read subscription id from a repository variable named `AZURE_SUBSCRIPTION_ID`.
+  # NOTE: we do NOT default to reading the subscription id from a secret; set it as a repository Variable.
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  # Read the Resource Group name from a repository variable named `AZURE_RESOURCE_GROUP_NAME`.
   # This workflow requires that repository Variable to be set. Do NOT store the resource group name as a secret.
-  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP }}
+  # If the repository Variable isn't set, fall back to a sensible default resource group name.
+  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME || 'simple-react-router-rg' }}
 
 permissions:
   contents: read
@@ -58,6 +61,22 @@ jobs:
       webAppName: ${{ steps.deploy-infra.outputs.webAppName }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pre-check resolved environment (non-secret values)
+        run: |
+          set -euo pipefail
+          echo "Resolved environment values (secrets are hidden)"
+          echo "AZURE_WEBAPP_NAME=${AZURE_WEBAPP_NAME:-<not set>}"
+          echo "AZURE_LOCATION=${AZURE_LOCATION:-<not set>}"
+          echo "APP_SERVICE_PLAN_SKU=${APP_SERVICE_PLAN_SKU:-<not set>}"
+          echo "AZURE_RESOURCE_GROUP_NAME=${AZURE_RESOURCE_GROUP_NAME:-<not set>}"
+          echo "NODE_VERSION=${NODE_VERSION:-<not set>}"
+          echo "AZURE_WEBAPP_PACKAGE_PATH=${AZURE_WEBAPP_PACKAGE_PATH:-<not set>}"
+          if [[ -n "${AZURE_SUBSCRIPTION_ID-}" ]]; then
+            echo "AZURE_SUBSCRIPTION_ID=present"
+          else
+            echo "AZURE_SUBSCRIPTION_ID=<not set>"
+          fi
 
       - name: Validate inputs
         id: validate-inputs
@@ -94,7 +113,7 @@ jobs:
 
           # Validate web app name: DNS label rules (2-60 chars, alphanumeric and hyphens, cannot start or end with hyphen)
           if [[ -z "${WEBAPP_NAME}" ]]; then
-            echo "::error title=Missing Web App Name::AZURE_WEBAPP_NAME is empty. Set a repository variable named AZURE_WEBAPP_NAME or update the workflow default."
+            echo "::error title=Missing Web App Name::Repository Variable AZURE_WEBAPP_NAME is not set. Create it under Settings → Variables → Actions and set the web app name."
             echo "::endgroup::"
             exit 1
           fi
@@ -113,13 +132,22 @@ jobs:
           echo "::endgroup::"
           echo "::notice::All inputs look good: SKU=${SKU}, LOCATION=${LOCATION}, WEBAPP_NAME=${WEBAPP_NAME}"
 
-          # Validate resource group variable is set (we require a repository Variable named AZURE_RESOURCE_GROUP)
+          # Validate resource group variable is set (we require a repository Variable named AZURE_RESOURCE_GROUP_NAME)
           if [[ -z "${AZURE_RESOURCE_GROUP_NAME-}" ]]; then
-            echo "::error title=Missing Resource Group Variable::Repository Variable AZURE_RESOURCE_GROUP is not set. Create it under Settings → Variables → Actions and set the resource group name."
+            echo "::error title=Missing Resource Group Variable::Repository Variable AZURE_RESOURCE_GROUP_NAME is not set. Create it under Settings → Variables → Actions and set the resource group name."
             echo "::endgroup::"
             exit 1
           else
-            echo "::notice title=Resource Group OK::AZURE_RESOURCE_GROUP='${AZURE_RESOURCE_GROUP_NAME}'"
+            echo "::notice title=Resource Group OK::AZURE_RESOURCE_GROUP_NAME='${AZURE_RESOURCE_GROUP_NAME}'"
+          fi
+
+          # Validate subscription id repository Variable is set
+          if [[ -z "${AZURE_SUBSCRIPTION_ID-}" ]]; then
+            echo "::error title=Missing Subscription Variable::Repository Variable AZURE_SUBSCRIPTION_ID is not set. Create it under Settings → Variables → Actions and set your subscription id."
+            echo "::endgroup::"
+            exit 1
+          else
+            echo "::notice title=Subscription OK::AZURE_SUBSCRIPTION_ID=present"
           fi
 
       - name: Azure Login

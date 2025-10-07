@@ -279,15 +279,16 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 2. **Configure GitHub Secrets and Variables**:
 
 - `AZURE_CREDENTIALS`: Full JSON output from step 1
-- `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID
-- `AZURE_RESOURCE_GROUP` (repository Variable): Resource group name (e.g., `simple-react-router-rg`)
+- `AZURE_SUBSCRIPTION_ID` (repository Variable): Your Azure subscription ID
+- `AZURE_WEBAPP_NAME` (repository Variable) — REQUIRED: the name for your web app
+- `AZURE_RESOURCE_GROUP_NAME` (repository Variable) — optional; if not set the workflow defaults to `simple-react-router-rg`
 
-Note: the workflow reads the resource group from a repository Variable named `AZURE_RESOURCE_GROUP`. The workflow requires this variable to be set; it does not read the resource group from a secret.
+  Note: the workflow requires `AZURE_WEBAPP_NAME` as a repository Variable and prefers the resource group be set in `AZURE_RESOURCE_GROUP_NAME` (repository Variable). The resource group will default to `simple-react-router-rg` when the variable is not provided.
 
-1. **Deploy**:
+3. **Deploy**:
 
-- Push to `main` branch or manually trigger the workflow
-- Infrastructure and application will be deployed automatically
+   - Push to `main` branch or manually trigger the workflow
+   - Infrastructure and application will be deployed automatically
 
 For detailed setup instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 

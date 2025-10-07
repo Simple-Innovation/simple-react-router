@@ -161,12 +161,12 @@ echo
 echo "Next steps:"
 echo "1) Copy the contents of $OUTPUT_FILE and add it to the GitHub repository secret named AZURE_CREDENTIALS." 
 echo "   Settings → Secrets and variables → Actions → New repository secret (AZURE_CREDENTIALS)"
-echo "2) Add AZURE_SUBSCRIPTION_ID secret (value: $SUBSCRIPTION_ID)"
+echo "2) Add AZURE_SUBSCRIPTION_ID repository Variable (value: $SUBSCRIPTION_ID)"
 echo
 if [[ $SET_SECRETS -eq 1 ]]; then
   if command -v gh >/dev/null 2>&1; then
     echo "Uploading secrets to GitHub using gh..."
-    # If a token was provided, authenticate gh non-interactively for this session
+  # If a token was provided, authenticate gh non-interactively for this session
     if [[ -n "$GITHUB_TOKEN" ]]; then
       echo "Authenticating gh with provided token..."
       # Preserve any existing GITHUB_PAT, then clear it from the environment so gh will store credentials
@@ -250,7 +250,7 @@ if [[ $SET_SECRETS -eq 1 ]]; then
 else
   echo "Tip: to set the secret using the GH CLI (if installed):"
   echo "  gh secret set AZURE_CREDENTIALS --body \"$(cat $OUTPUT_FILE | sed -e 's/"/\\"/g')\""
-  echo "  echo -n \"$SUBSCRIPTION_ID\" | gh secret set AZURE_SUBSCRIPTION_ID"
+  echo "  gh variable set AZURE_SUBSCRIPTION_ID --body \"$SUBSCRIPTION_ID\" --visibility repository"
 fi
 echo
 echo "Done."

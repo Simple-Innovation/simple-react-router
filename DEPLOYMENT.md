@@ -88,7 +88,7 @@ az account show --query id --output tsv
 Notes:
 
 - If you are creating the service principal locally, first ensure `az account show` returns the subscription you intend to use. Use `az account set` to switch if needed.
-- The `AZURE_SUBSCRIPTION_ID` GitHub secret should match the subscription you select here; the workflow uses that secret when performing infrastructure deployments.
+- The `AZURE_SUBSCRIPTION_ID` repository Variable should match the subscription you select here; the workflow reads the subscription id from a repository Variable named `AZURE_SUBSCRIPTION_ID`.
 
 ### 1. Create an Azure Service Principal
 
@@ -188,14 +188,14 @@ Example (non-interactive):
 
      - Value: The entire JSON output from step 1
 
-   - `AZURE_SUBSCRIPTION_ID` (secret)
+   - `AZURE_SUBSCRIPTION_ID` (repository Variable)
 
      - Value: Your Azure subscription ID (e.g., `12345678-1234-1234-1234-123456789abc`)
 
-   - `AZURE_RESOURCE_GROUP` (repository Variable)
+   - `AZURE_RESOURCE_GROUP_NAME` (repository Variable)
      - Value: Name for your resource group (e.g., `simple-react-router-rg`)
 
-Note: this workflow requires `AZURE_RESOURCE_GROUP` to be a repository Variable (not a secret). Set it under Settings → Variables → Actions.
+Note: this workflow requires `AZURE_RESOURCE_GROUP_NAME` to be a repository Variable (not a secret). Set it under Settings → Variables → Actions.
 
 ### 3. Update Workflow Configuration (Optional)
 
@@ -205,12 +205,15 @@ Note: this workflow requires `AZURE_RESOURCE_GROUP` to be a repository Variable 
 
    ```yaml
    env:
-     AZURE_WEBAPP_NAME: simple-react-router-webapp # Your web app name (default includes '-webapp' suffix)
+     # NOTE: The workflow requires `AZURE_WEBAPP_NAME` to be set as a repository Variable.
+     AZURE_WEBAPP_NAME: <your-webapp-name>
      AZURE_WEBAPP_PACKAGE_PATH: "dev/dist"
      NODE_VERSION: "22.x"
      AZURE_LOCATION: "eastus" # Azure region
      APP_SERVICE_PLAN_SKU: "F1" # F1=Free, B1=Basic, S1=Standard
    ```
+
+   The workflow will default the resource group name to `simple-react-router-rg` if the repository Variable `AZURE_RESOURCE_GROUP_NAME` is not set.
 
 4. Commit and push the changes
 
@@ -286,7 +289,7 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 
 - Verify the `AZURE_CREDENTIALS` secret is correctly configured
 - Ensure the service principal has Contributor access to the subscription
-- Check that the `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` secrets are set
+- Check that the `AZURE_SUBSCRIPTION_ID` repository Variable and `AZURE_RESOURCE_GROUP_NAME` repository Variable are set
 - Review the GitHub Actions logs for specific error messages
 - Verify the web app name is globally unique (Bicep adds a unique suffix by default)
 
