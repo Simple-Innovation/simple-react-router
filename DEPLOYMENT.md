@@ -124,7 +124,7 @@ Authenticate `gh` non-interactively with your token (example):
 ```bash
 # Prefer reading the token from an environment variable or .env file to avoid leaving it in your shell history
 # Example .env file:
-#   GITHUB_PAT=ghp_xxx...yourtoken...
+#   GITHUB_PAT=ghp_xxx...your_token...
 export $(grep -v '^#' .env | xargs)
 # If GITHUB_PAT is set in your environment, save and clear it so gh stores the credentials instead
 PREV_GITHUB_PAT="${GITHUB_PAT-}"
