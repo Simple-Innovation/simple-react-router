@@ -32,7 +32,8 @@ If you already have a legacy npm-installed package and need to diagnose why `az`
 Note about the npm `azure-cli` package
 
 The community npm package historically provides the older Node.js-based Azure CLI (often called `azure` or `azure-xplat-cli`) and installs an executable named `azure` rather than the newer `az` command used by Microsoft's modern CLI. If you installed that package, you may find the legacy executable in your npm global bin directory (usually `$(npm prefix -g)/bin`). We strongly recommend installing the official `az` CLI instead.
-```
+
+````
 
 Alternatives (preferred when available)
 
@@ -40,7 +41,7 @@ Alternatives (preferred when available)
 
 ```bash
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-```
+````
 
 - Install via pip (user install):
 
@@ -79,12 +80,15 @@ The command will output JSON credentials. **Save this entire JSON output** - you
 3. Create the following secrets:
 
    **AZURE_CREDENTIALS**
+
    - Value: The entire JSON output from step 1
 
    **AZURE_SUBSCRIPTION_ID**
+
    - Value: Your Azure subscription ID (e.g., `12345678-1234-1234-1234-123456789abc`)
 
    **AZURE_RESOURCE_GROUP**
+
    - Value: Name for your resource group (e.g., `simple-react-router-rg`)
 
 ### 3. Update Workflow Configuration (Optional)
@@ -95,11 +99,11 @@ The command will output JSON credentials. **Save this entire JSON output** - you
 
    ```yaml
    env:
-     AZURE_WEBAPP_NAME: simple-react-router    # Your web app name
-     AZURE_WEBAPP_PACKAGE_PATH: 'dev/dist'
-     NODE_VERSION: '22.x'
-     AZURE_LOCATION: 'eastus'                  # Azure region
-     APP_SERVICE_PLAN_SKU: 'F1'                # F1=Free, B1=Basic, S1=Standard
+     AZURE_WEBAPP_NAME: simple-react-router # Your web app name
+     AZURE_WEBAPP_PACKAGE_PATH: "dev/dist"
+     NODE_VERSION: "22.x"
+     AZURE_LOCATION: "eastus" # Azure region
+     APP_SERVICE_PLAN_SKU: "F1" # F1=Free, B1=Basic, S1=Standard
    ```
 
 4. Commit and push the changes
@@ -223,43 +227,54 @@ npx serve dev/dist
 ## Customization
 
 ### Change Azure Region
+
 Update the `AZURE_LOCATION` environment variable in the workflow file:
+
 ```yaml
 env:
-  AZURE_LOCATION: 'westus2'  # or 'eastus', 'westeurope', etc.
+  AZURE_LOCATION: "westus2" # or 'eastus', 'westeurope', etc.
 ```
 
 ### Change App Service Plan Tier
+
 Update the `APP_SERVICE_PLAN_SKU` environment variable:
+
 ```yaml
 env:
-  APP_SERVICE_PLAN_SKU: 'B1'  # F1=Free, B1=Basic, S1=Standard, P1V2=Premium
+  APP_SERVICE_PLAN_SKU: "B1" # F1=Free, B1=Basic, S1=Standard, P1V2=Premium
 ```
 
 Or modify the Bicep template (`infrastructure/main.bicep`) to add more SKU options.
 
 ### Change Node.js Version
+
 Update the `NODE_VERSION` environment variable in the workflow file:
+
 ```yaml
 env:
-  NODE_VERSION: '22.x'  # or '18.x', '20.x'
+  NODE_VERSION: "22.x" # or '18.x', '20.x'
 ```
 
 And update the `nodeVersion` parameter in the infrastructure deployment step:
+
 ```yaml
 parameters: >
   nodeVersion=22-lts  # or 18-lts, 20-lts
 ```
 
 ### Change Build Output Path
+
 Update the `AZURE_WEBAPP_PACKAGE_PATH` environment variable:
+
 ```yaml
 env:
-  AZURE_WEBAPP_PACKAGE_PATH: 'your/custom/path'
+  AZURE_WEBAPP_PACKAGE_PATH: "your/custom/path"
 ```
 
 ### Modify Deployment Trigger
+
 Edit the `on` section in the workflow file. For example, to deploy on release:
+
 ```yaml
 on:
   release:
@@ -268,7 +283,9 @@ on:
 ```
 
 ### Customize Azure Resources
+
 Edit `infrastructure/main.bicep` to customize the Azure resources. You can add:
+
 - Application Insights for monitoring
 - Azure CDN for content delivery
 - Custom domains and SSL certificates

@@ -2,9 +2,9 @@ name: Verify az CLI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch: {}
 
 jobs:
@@ -12,13 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install official az CLI
+      - name: Check for az on PATH
         run: |
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          if ! command -v az >/dev/null 2>&1; then
+            echo "az CLI not found on PATH. Please install the official Azure CLI in the environment."
+            exit 1
+          fi
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install dependencies (optional)
         run: npm ci || true
       - name: Make verify script executable

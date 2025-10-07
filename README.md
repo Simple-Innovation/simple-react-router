@@ -8,6 +8,8 @@ A by the book react router implementation with server side actions.
 npm install simple-react-router
 ```
 
+For instructions on deploying this demo to Azure (including installing the Azure CLI), see `DEPLOYMENT.md`.
+
 ## Features
 
 - 🎯 Simple and intuitive API
