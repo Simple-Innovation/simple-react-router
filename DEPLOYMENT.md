@@ -9,6 +9,47 @@ This guide explains how to deploy the Simple React Router demo application to Az
 - Admin access to the GitHub repository (to configure secrets)
 - Azure CLI installed (for creating service principal)
 
+### Install Azure CLI in a GitHub Codespace
+
+Prefer the official Microsoft installer for the modern Azure CLI (`az`) when working in a Codespace. The official installer provides the supported, up-to-date distribution and is the recommended path for production or CI environments. If you must use a node/npm package, note it historically installs a legacy `azure` command (see note below) and is not recommended.
+
+Official installer (requires sudo in the Codespace):
+
+```bash
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+```
+
+User (no-sudo) alternative via pip:
+
+```bash
+python3 -m pip install --user azure-cli
+export PATH="$HOME/.local/bin:$PATH"
+az --version
+```
+
+If you already have a legacy npm-installed package and need to diagnose why `az` is missing, check the npm prefix/bin as described below.
+
+Note about the npm `azure-cli` package
+
+The community npm package historically provides the older Node.js-based Azure CLI (often called `azure` or `azure-xplat-cli`) and installs an executable named `azure` rather than the newer `az` command used by Microsoft's modern CLI. If you installed that package, you may find the legacy executable in your npm global bin directory (usually `$(npm prefix -g)/bin`). We strongly recommend installing the official `az` CLI instead.
+```
+
+Alternatives (preferred when available)
+
+- Official Microsoft installer (requires sudo in the environment):
+
+```bash
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+```
+
+- Install via pip (user install):
+
+```bash
+python3 -m pip install --user azure-cli
+```
+
+Use these alternatives if you need the officially supported distribution or run into npm package limitations.
+
 ## Setup Steps
 
 ### 1. Create an Azure Service Principal
@@ -51,6 +92,7 @@ The command will output JSON credentials. **Save this entire JSON output** - you
 1. Open `.github/workflows/azure-webapps-deploy.yml` in your repository
 2. Find the `env` section at the top of the file
 3. Optionally update the following values:
+
    ```yaml
    env:
      AZURE_WEBAPP_NAME: simple-react-router    # Your web app name
@@ -59,15 +101,18 @@ The command will output JSON credentials. **Save this entire JSON output** - you
      AZURE_LOCATION: 'eastus'                  # Azure region
      APP_SERVICE_PLAN_SKU: 'F1'                # F1=Free, B1=Basic, S1=Standard
    ```
+
 4. Commit and push the changes
 
 ### 4. Deploy
 
 The workflow is configured to run automatically on:
+
 - Every push to the `main` branch
 - Manual trigger via GitHub Actions UI
 
 To manually trigger:
+
 1. Go to your repository on GitHub
 2. Click on the "Actions" tab
 3. Select "Deploy to Azure Web App" workflow
@@ -75,6 +120,7 @@ To manually trigger:
 5. Select the branch and click "Run workflow"
 
 The deployment process will:
+
 1. **Provision Infrastructure**: Deploy Bicep template to create/update Azure resources
 2. **Build Application**: Install dependencies, run tests, and build the demo app
 3. **Deploy to Azure**: Deploy the built application to the Azure Web App
@@ -91,6 +137,7 @@ The deployment process will:
 The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) performs the following:
 
 ### Infrastructure Job
+
 - Checks out the code
 - Logs in to Azure using service principal credentials
 - Creates or updates the resource group
@@ -100,6 +147,7 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 - Outputs the web app name for subsequent jobs
 
 ### Build Job
+
 - Checks out the code
 - Sets up Node.js 22.x
 - Installs dependencies
@@ -109,6 +157,7 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 - Uploads build artifacts
 
 ### Deploy Job
+
 - Downloads build artifacts
 - Logs in to Azure using service principal credentials
 - Deploys to Azure Web App using the web app name from infrastructure job
@@ -124,6 +173,7 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 ## Troubleshooting
 
 ### Infrastructure Deployment Fails
+
 - Verify the `AZURE_CREDENTIALS` secret is correctly configured
 - Ensure the service principal has Contributor access to the subscription
 - Check that the `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` secrets are set
@@ -131,24 +181,29 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 - Verify the web app name is globally unique (Bicep adds a unique suffix by default)
 
 ### Authentication Fails
+
 - Ensure the service principal credentials haven't expired
 - Verify the `AZURE_CREDENTIALS` secret contains valid JSON
 - Check that the service principal has the required permissions
 
 ### Deployment Fails
+
 - Verify the infrastructure job completed successfully
 - Check that the web app was created in the Azure Portal
 - Review the GitHub Actions logs for specific error messages
 
 ### Routes Not Working (404 errors)
+
 - Ensure `web.config` is present in the deployed files
 - Check Azure App Service logs in the Azure Portal
 
 ### Application Not Loading
+
 - Check the Azure App Service logs in Azure Portal under "Monitoring" > "Log stream"
 - Verify the build artifacts include `index.html` and assets
 
 ### Build Fails
+
 - Check that all dependencies are listed in `package.json`
 - Verify Node.js version compatibility
 - Review test failures in the GitHub Actions logs

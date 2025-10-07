@@ -1,0 +1,27 @@
+name: Verify az CLI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official az CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies (optional)
+        run: npm ci || true
+      - name: Make verify script executable
+        run: chmod +x scripts/verify-az.sh
+      - name: Run az verification
+        run: scripts/verify-az.sh
