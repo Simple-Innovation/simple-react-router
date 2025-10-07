@@ -113,6 +113,9 @@ jobs:
 
                       RG="${{ github.event.inputs.resource-group || env.AZURE_RESOURCE_GROUP_NAME }}"
                       WAIT="${{ github.event.inputs.wait || 'true' }}"
+                      # Polling config
+                      POLL_INTERVAL_SECONDS=10
+                      POLL_TIMEOUT_SECONDS=900  # 15 minutes
 
                       if [ -z "$RG" ]; then
                         echo "No resource group resolved; cannot delete."
@@ -123,10 +126,34 @@ jobs:
 
                       if [ "${WAIT,,}" = "false" ] || [ "${WAIT,,}" = "no" ] || [ "${WAIT,,}" = "0" ]; then
                         echo "Starting deletion (no-wait)."
-                        az group delete --name "$RG" --yes --no-wait
+                        az group delete --name "$RG" --yes --no-wait || true
                         echo "Delete requested. The operation is running asynchronously."
                       else
-                        echo "Starting deletion and waiting for completion."
+                        echo "Starting deletion and waiting for completion (az group delete blocks until finished)."
+                        # az group delete without --no-wait will wait; still check existence afterwards
                         az group delete --name "$RG" --yes
-                        echo "Deletion command completed. The resource group should be removed."
+                        echo "az group delete returned. Verifying the resource group was removed..."
                       fi
+
+                      # Poll until the group no longer exists or timeout
+                      START_TS=$(date +%s)
+                      while true; do
+                        EXISTS=$(az group exists --name "$RG" -o tsv || echo false)
+                        if [ "$EXISTS" = "false" ]; then
+                          echo "Resource group '$RG' no longer exists. Deletion confirmed."
+                          break
+                        fi
+
+                        NOW=$(date +%s)
+                        ELAPSED=$((NOW - START_TS))
+                        if [ $ELAPSED -ge $POLL_TIMEOUT_SECONDS ]; then
+                          echo "Timed out waiting for resource group deletion after ${POLL_TIMEOUT_SECONDS}s."
+                          echo "Last known state: exists=$EXISTS"
+                          exit 2
+                        fi
+
+                        echo "Resource group '$RG' still exists (elapsed ${ELAPSED}s). Waiting ${POLL_INTERVAL_SECONDS}s before rechecking..."
+                        sleep $POLL_INTERVAL_SECONDS
+                      done
+
+                      echo "Deletion step completed."
