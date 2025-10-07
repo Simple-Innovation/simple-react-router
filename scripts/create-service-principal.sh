@@ -9,6 +9,7 @@ NAME="simple-react-router-deploy"
 ROLE="contributor"
 SUBSCRIPTION_ID=""
 OUTPUT_FILE="azure-credentials.json"
+GITHUB_TOKEN=""
 AUTO_YES=0
 SET_SECRETS=0
 
@@ -21,8 +22,10 @@ Options:
   --name NAME            Service principal name (default: $NAME)
   --role ROLE            Role for the SP (default: $ROLE)
   --output FILE          File to write the JSON credentials to (default: $OUTPUT_FILE)
+  --set-secrets         Attempt to set the secrets in GitHub using the gh CLI (requires gh to be installed and authenticated)
   --yes                  Don't prompt for confirmation
   -h, --help             Show this help
+  --github-token TOKEN   Provide a GitHub PAT/fine-grained token to authenticate gh for uploading secrets (keeps token out of shell history when passed as env)
 
 Example:
   $0 --subscription-id \\$(az account show --query id -o tsv) --name my-sp --output my-creds.json
@@ -43,6 +46,8 @@ while [[ $# -gt 0 ]]; do
       OUTPUT_FILE="$2"; shift 2;;
     --set-secrets)
       SET_SECRETS=1; shift 1;;
+      --github-token)
+        GITHUB_TOKEN="$2"; shift 2;;
     --yes)
       AUTO_YES=1; shift 1;;
     -h|--help)
@@ -126,6 +131,12 @@ echo
 if [[ $SET_SECRETS -eq 1 ]]; then
   if command -v gh >/dev/null 2>&1; then
     echo "Uploading secrets to GitHub using gh..."
+    # If a token was provided, authenticate gh non-interactively for this session
+    if [[ -n "$GITHUB_TOKEN" ]]; then
+      echo "Authenticating gh with provided token..."
+      # Use a here-string to avoid token appearing in process list
+      gh auth login --with-token <<< "$GITHUB_TOKEN" >/dev/null 2>&1 || echo "Warning: gh auth login failed with provided token"
+    fi
     # AZURE_CREDENTIALS
     gh secret set AZURE_CREDENTIALS --body "$(cat "$OUTPUT_FILE")" || echo "Failed to set AZURE_CREDENTIALS via gh"
     # AZURE_SUBSCRIPTION_ID
