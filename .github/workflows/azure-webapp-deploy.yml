@@ -28,10 +28,9 @@ on:
 
 env:
   # Read the web app name from a GitHub repository variable named `AZURE_WEBAPP_NAME`.
-  # If the variable is not set, fall back to a default with a clear suffix to reduce naming collisions.
+  # If the variable is not set, fall back to a sensible default to reduce naming collisions.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
-  # Require the repository Variable AZURE_WEBAPP_NAME to be set (no workflow default).
-  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router-web' }}
   AZURE_WEBAPP_PACKAGE_PATH: "dev/dist" # set this to the path to your web app project, defaults to the repository root
   NODE_VERSION: "22.x" # set this to the node version to use
   # Read the Azure region from a GitHub repository variable named `AZURE_LOCATION`.
@@ -77,6 +76,9 @@ jobs:
           else
             echo "AZURE_SUBSCRIPTION_ID=<not set>"
           fi
+          # Compute and show the App Service Plan name derived from the web app name
+          APP_SERVICE_PLAN_NAME="${AZURE_WEBAPP_NAME:-simple-react-router-web}-plan"
+          echo "APP_SERVICE_PLAN_NAME=${APP_SERVICE_PLAN_NAME}"
 
       - name: Validate inputs
         id: validate-inputs
@@ -113,7 +115,7 @@ jobs:
 
           # Validate web app name: DNS label rules (2-60 chars, alphanumeric and hyphens, cannot start or end with hyphen)
           if [[ -z "${WEBAPP_NAME}" ]]; then
-            echo "::error title=Missing Web App Name::Repository Variable AZURE_WEBAPP_NAME is not set. Create it under Settings → Variables → Actions and set the web app name."
+            echo "::error title=Missing Web App Name::AZURE_WEBAPP_NAME is empty. The workflow will default to 'simple-react-router-web' if not provided; to override set repository Variable AZURE_WEBAPP_NAME under Settings → Variables → Actions."
             echo "::endgroup::"
             exit 1
           fi

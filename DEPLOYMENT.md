@@ -205,8 +205,8 @@ Note: this workflow requires `AZURE_RESOURCE_GROUP_NAME` to be a repository Vari
 
    ```yaml
    env:
-     # NOTE: The workflow requires `AZURE_WEBAPP_NAME` to be set as a repository Variable.
-     AZURE_WEBAPP_NAME: <your-webapp-name>
+     # NOTE: The workflow will default `AZURE_WEBAPP_NAME` to 'simple-react-router-web' if not provided.
+     AZURE_WEBAPP_NAME: simple-react-router-web
      AZURE_WEBAPP_PACKAGE_PATH: "dev/dist"
      NODE_VERSION: "22.x"
      AZURE_LOCATION: "eastus" # Azure region
