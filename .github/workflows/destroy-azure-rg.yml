@@ -27,7 +27,6 @@ permissions:
 jobs:
   destroy:
     runs-on: ubuntu-latest
-    environment: Destroy
     steps:
       - name: Checkout
         uses: actions/checkout@v4
