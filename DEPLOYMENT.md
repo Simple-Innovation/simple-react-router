@@ -33,15 +33,13 @@ Note about the npm `azure-cli` package
 
 The community npm package historically provides the older Node.js-based Azure CLI (often called `azure` or `azure-xplat-cli`) and installs an executable named `azure` rather than the newer `az` command used by Microsoft's modern CLI. If you installed that package, you may find the legacy executable in your npm global bin directory (usually `$(npm prefix -g)/bin`). We strongly recommend installing the official `az` CLI instead.
 
-````
-
 Alternatives (preferred when available)
 
 - Official Microsoft installer (requires sudo in the environment):
 
 ```bash
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-````
+```
 
 - Install via pip (user install):
 
@@ -52,6 +50,45 @@ python3 -m pip install --user azure-cli
 Use these alternatives if you need the officially supported distribution or run into npm package limitations.
 
 ## Setup Steps
+
+### Login to Azure and select subscription
+
+Before creating a service principal, make sure you're logged in to the Azure CLI and have selected the correct subscription. This ensures the service principal and resources are created in the intended subscription.
+
+Interactive login (recommended when working locally):
+
+```bash
+# Sign in with your user account (opens a browser window)
+az login
+
+# List available subscriptions (helps you pick the right one)
+az account list --output table
+
+# Set the active subscription by name or id
+az account set --subscription "YOUR_SUBSCRIPTION_ID_OR_NAME"
+
+# Verify the active subscription id
+az account show --query id --output tsv
+```
+
+Non-interactive login using a service principal (useful for CI or automation):
+
+```bash
+# Example: login with client id, client secret and tenant id
+az login --service-principal \
+  --username <APP_CLIENT_ID> \
+  --password <APP_CLIENT_SECRET> \
+  --tenant <TENANT_ID>
+
+# Then set and verify the subscription as above
+az account set --subscription "YOUR_SUBSCRIPTION_ID_OR_NAME"
+az account show --query id --output tsv
+```
+
+Notes:
+
+- If you are creating the service principal locally, first ensure `az account show` returns the subscription you intend to use. Use `az account set` to switch if needed.
+- The `AZURE_SUBSCRIPTION_ID` GitHub secret should match the subscription you select here; the workflow uses that secret when performing infrastructure deployments.
 
 ### 1. Create an Azure Service Principal
 
@@ -73,6 +110,23 @@ az account show --query id --output tsv
 
 The command will output JSON credentials. **Save this entire JSON output** - you'll need it in the next step.
 
+Alternatively, use the included helper script `scripts/create-service-principal.sh` which wraps the command and saves the JSON for you.
+
+Example (interactive):
+
+```bash
+# Ensure you are logged in and have set the subscription (see above)
+./scripts/create-service-principal.sh --output azure-credentials.json
+
+# Then copy the contents of azure-credentials.json into the AZURE_CREDENTIALS secret
+```
+
+Example (non-interactive):
+
+```bash
+./scripts/create-service-principal.sh --subscription-id $(az account show --query id -o tsv) --name my-sp --output my-creds.json --yes
+```
+
 ### 2. Configure GitHub Repository Secrets
 
 1. Open your GitHub repository
@@ -93,7 +147,7 @@ The command will output JSON credentials. **Save this entire JSON output** - you
 
 ### 3. Update Workflow Configuration (Optional)
 
-1. Open `.github/workflows/azure-webapps-deploy.yml` in your repository
+1. Open `.github/workflows/azure-webapp-deploy.yml` in your repository
 2. Find the `env` section at the top of the file
 3. Optionally update the following values:
 
