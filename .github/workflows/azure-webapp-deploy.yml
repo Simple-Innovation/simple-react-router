@@ -238,7 +238,12 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ needs.infrastructure.outputs.webAppName }}
-          package: .
+          # The build artifact is uploaded as the 'node-app' artifact. Downloaded by
+          # actions/download-artifact it will be available under ./node-app. The
+          # actual web app package (index.html, assets) lives in the dist folder
+          # configured by AZURE_WEBAPP_PACKAGE_PATH (default: dev/dist). Point the
+          # deploy action at that folder so index.html is deployed to the site root.
+          package: ./node-app/${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
 
       - name: Azure Logout
         if: always()
