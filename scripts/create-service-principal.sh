@@ -134,8 +134,17 @@ if [[ $SET_SECRETS -eq 1 ]]; then
     # If a token was provided, authenticate gh non-interactively for this session
     if [[ -n "$GITHUB_TOKEN" ]]; then
       echo "Authenticating gh with provided token..."
+      # Preserve any existing GITHUB_PAT, then clear it from the environment so gh will store credentials
+      PREV_GITHUB_PAT="${GITHUB_PAT-}"
+      unset GITHUB_PAT
       # Use a here-string to avoid token appearing in process list
-      gh auth login --with-token <<< "$GITHUB_TOKEN" >/dev/null 2>&1 || echo "Warning: gh auth login failed with provided token"
+      if ! gh auth login --with-token <<< "$GITHUB_TOKEN" >/dev/null 2>&1; then
+        echo "Warning: gh auth login failed with provided token" >&2
+      fi
+      # Restore previous env var if it existed
+      if [[ -n "${PREV_GITHUB_PAT-}" ]]; then
+        export GITHUB_PAT="$PREV_GITHUB_PAT"
+      fi
     fi
     # AZURE_CREDENTIALS
     gh secret set AZURE_CREDENTIALS --body "$(cat "$OUTPUT_FILE")" || echo "Failed to set AZURE_CREDENTIALS via gh"

@@ -110,6 +110,55 @@ az account show --query id --output tsv
 
 The command will output JSON credentials. **Save this entire JSON output** - you'll need it in the next step.
 
+### Authenticate the GitHub CLI (`gh`) using a Personal Access Token (PAT)
+
+If you want the helper script to upload secrets automatically (`--set-secrets`), `gh` must be authenticated with a token that has permission to manage Actions secrets for the repository. There are two common token types:
+
+- Fine-grained personal access token (recommended): when creating the token, select the specific repository and grant the repository permission "Secrets (Actions)" → Read & write (and optionally "Actions" → Read & write).
+- Classic personal access token: grant the `repo` scope (sufficient for private repos) and `workflow` if needed.
+
+Create a token at <https://github.com/settings/tokens> (choose "Fine-grained" for tighter scope). Keep the token secret.
+
+Authenticate `gh` non-interactively with your token (example):
+
+```bash
+# Prefer reading the token from an environment variable or .env file to avoid leaving it in your shell history
+# Example .env file:
+#   GITHUB_PAT=ghp_xxx...yourtoken...
+export $(grep -v '^#' .env | xargs)
+# If GITHUB_PAT is set in your environment, save and clear it so gh stores the credentials instead
+PREV_GITHUB_PAT="${GITHUB_PAT-}"
+unset GITHUB_PAT
+echo "$GITHUB_PAT" | gh auth login --with-token
+# restore the previous value (if any) to avoid leaking the token in the environment
+if [[ -n "${PREV_GITHUB_PAT-}" ]]; then
+  export GITHUB_PAT="$PREV_GITHUB_PAT"
+fi
+
+# Confirm auth status
+gh auth status
+
+# Verify you can read the repository public key (replace owner/repo as needed):
+gh api repos/Simple-Innovation/simple-react-router/actions/secrets/public-key -q '.key'
+```
+
+If the last command returns a long base64-looking string, `gh` has permission to manage secrets for that repository and the helper script can upload secrets using `--set-secrets`.
+
+Example using the helper script with a token (non-interactive):
+
+```bash
+./scripts/create-service-principal.sh \
+  --subscription-id $(az account show --query id -o tsv) \
+  --output azure-credentials.json \
+  --yes --set-secrets --github-token "$GITHUB_PAT"
+```
+
+Security notes:
+
+- Prefer fine-grained tokens and restrict them to the single repository and only the permissions required (Secrets (Actions) → Read & write).
+- Avoid passing tokens directly on the command line if possible (use environment variables or stdin) so they don't appear in shell history or process listings.
+- Revoke the token when it is no longer needed.
+
 Alternatively, use the included helper script `scripts/create-service-principal.sh` which wraps the command and saves the JSON for you.
 
 Note: the `--sdk-auth` flag is deprecated in recent `az` releases and will be removed in the future. The helper script avoids this warning by creating the service principal and assembling the SDK-style JSON itself, producing an output compatible with the `AZURE_CREDENTIALS` secret used by the GitHub Action `azure/login`.
