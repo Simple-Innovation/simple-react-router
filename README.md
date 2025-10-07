@@ -22,7 +22,7 @@ For instructions on deploying this demo to Azure (including installing the Azure
 ## Basic Usage
 
 ```tsx
-import { Router, Routes, Route, Link } from 'simple-react-router';
+import { Router, Routes, Route, Link } from "simple-react-router";
 
 function App() {
   return (
@@ -31,7 +31,7 @@ function App() {
         <Link to="/">Home</Link>
         <Link to="/about">About</Link>
       </nav>
-      
+
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
@@ -50,9 +50,7 @@ function App() {
 The root component that provides routing context to your application.
 
 ```tsx
-<Router>
-  {/* Your app content */}
-</Router>
+<Router>{/* Your app content */}</Router>
 ```
 
 #### `<Routes>`
@@ -75,6 +73,7 @@ Defines a route with a path and element to render.
 ```
 
 **Props:**
+
 - `path` (string): The URL path pattern to match
 - `element` (ReactElement): The component to render when the route matches
 - `action` (optional): Server-side action handler for form submissions
@@ -84,12 +83,13 @@ Defines a route with a path and element to render.
 Navigation component that renders an accessible anchor tag.
 
 ```tsx
-<Link to="/about" replace={false} state={{ from: 'home' }}>
+<Link to="/about" replace={false} state={{ from: "home" }}>
   About
 </Link>
 ```
 
 **Props:**
+
 - `to` (string): Destination path
 - `replace` (boolean): Replace current history entry instead of pushing
 - `state` (any): State to pass with navigation
@@ -100,16 +100,19 @@ Navigation component that renders an accessible anchor tag.
 Form component with support for server-side actions.
 
 ```tsx
-<Form action={async (formData) => {
-  const name = formData.get('name');
-  await saveUser(name);
-}}>
+<Form
+  action={async (formData) => {
+    const name = formData.get("name");
+    await saveUser(name);
+  }}
+>
   <input name="name" />
   <button type="submit">Submit</button>
 </Form>
 ```
 
 **Props:**
+
 - `action` (function): Server-side action handler that receives FormData
 - All standard form attributes
 
@@ -120,15 +123,15 @@ Form component with support for server-side actions.
 Returns a function to navigate programmatically.
 
 ```tsx
-import { useNavigate } from 'simple-react-router';
+import { useNavigate } from "simple-react-router";
 
 function MyComponent() {
   const navigate = useNavigate();
-  
+
   const handleClick = () => {
-    navigate('/dashboard', { replace: true, state: { from: 'home' } });
+    navigate("/dashboard", { replace: true, state: { from: "home" } });
   };
-  
+
   return <button onClick={handleClick}>Go to Dashboard</button>;
 }
 ```
@@ -138,11 +141,11 @@ function MyComponent() {
 Returns the current location object.
 
 ```tsx
-import { useLocation } from 'simple-react-router';
+import { useLocation } from "simple-react-router";
 
 function MyComponent() {
   const location = useLocation();
-  
+
   return (
     <div>
       <p>Current path: {location.pathname}</p>
@@ -158,11 +161,11 @@ function MyComponent() {
 Returns the route parameters for the current route.
 
 ```tsx
-import { useParams } from 'simple-react-router';
+import { useParams } from "simple-react-router";
 
 function UserProfile() {
   const { id } = useParams<{ id: string }>();
-  
+
   return <div>User ID: {id}</div>;
 }
 ```
@@ -193,15 +196,15 @@ Forms can include server-side actions that run when submitted:
 
 ```tsx
 async function createUser(formData: FormData) {
-  const name = formData.get('name') as string;
-  const email = formData.get('email') as string;
-  
+  const name = formData.get("name") as string;
+  const email = formData.get("email") as string;
+
   // Call your API
-  const response = await fetch('/api/users', {
-    method: 'POST',
+  const response = await fetch("/api/users", {
+    method: "POST",
     body: JSON.stringify({ name, email }),
   });
-  
+
   return response.json();
 }
 
@@ -221,7 +224,7 @@ function CreateUser() {
 The library is written in TypeScript and provides full type definitions:
 
 ```tsx
-import { useParams, Location, NavigateOptions } from 'simple-react-router';
+import { useParams, Location, NavigateOptions } from "simple-react-router";
 
 // Type-safe params
 function UserProfile() {
@@ -236,13 +239,17 @@ To run the example application locally:
 
 1. Clone the repository
 2. Install dependencies:
+
    ```bash
    npm install
    ```
+
 3. Start the development server:
+
    ```bash
    npm run dev
    ```
+
 4. Open your browser to `http://localhost:3000`
 
 The development server will hot-reload as you make changes to the source code in the `src/` directory.
@@ -254,6 +261,7 @@ The development server will hot-reload as you make changes to the source code in
 This repository includes a GitHub Actions workflow for automatic deployment to Azure Web App. The workflow uses **Bicep** (Infrastructure as Code) to automatically provision Azure resources.
 
 **Features:**
+
 - Automatic infrastructure provisioning using Bicep
 - Build, test, and deployment automation
 - Node.js 22 LTS on Linux
@@ -262,12 +270,14 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 #### Quick Setup
 
 1. **Create Azure Service Principal**:
+
    ```bash
    az ad sp create-for-rbac --name "simple-react-router-deploy" \
      --role contributor --scopes /subscriptions/{subscription-id} --sdk-auth
    ```
 
 2. **Configure GitHub Secrets**:
+
    - `AZURE_CREDENTIALS`: Full JSON output from step 1
    - `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID
    - `AZURE_RESOURCE_GROUP`: Resource group name (e.g., `simple-react-router-rg`)

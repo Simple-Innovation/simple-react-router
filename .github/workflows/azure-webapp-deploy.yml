@@ -1,0 +1,203 @@
+# This workflow will build and deploy a React application to an Azure Web App.
+# It uses Bicep to provision Azure resources automatically.
+#
+# To configure this workflow:
+#
+# 1. Create an Azure Service Principal with Contributor access to your subscription:
+#    az ad sp create-for-rbac --name "simple-react-router-deploy" --role contributor \
+#      --scopes /subscriptions/{subscription-id} --sdk-auth
+#
+# 2. Create the following secrets in your repository (Settings > Secrets and variables > Actions):
+#    - AZURE_CREDENTIALS: The entire JSON output from step 1
+#    - AZURE_SUBSCRIPTION_ID: Your Azure subscription ID (or create a repository Variable named AZURE_SUBSCRIPTION_ID instead)
+#    - AZURE_RESOURCE_GROUP: Name of the resource group to create/use (e.g., 'simple-react-router-rg')
+#
+# 3. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
+#
+# For more information on GitHub Actions for Azure: https://github.com/Azure/Actions
+# For more information on the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# For more samples to get started with GitHub Action workflows to deploy to Azure: https://github.com/Azure/actions-workflow-samples
+
+name: Deploy to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  # Read the web app name from a GitHub repository variable named `AZURE_WEBAPP_NAME`.
+  # If the variable is not set, fall back to the existing default name.
+  # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router' }}
+  AZURE_WEBAPP_PACKAGE_PATH: "dev/dist" # set this to the path to your web app project, defaults to the repository root
+  NODE_VERSION: "22.x" # set this to the node version to use
+  # Read the Azure region from a GitHub repository variable named `AZURE_LOCATION`.
+  # If the variable is not set, fall back to 'uksouth'.
+  # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'uksouth' }} # Azure region for resources
+  # Read the App Service Plan SKU from a GitHub repository variable named `APP_SERVICE_PLAN_SKU`.
+  # If the variable is not set, fall back to 'F1'.
+  # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
+  APP_SERVICE_PLAN_SKU: ${{ vars.APP_SERVICE_PLAN_SKU || 'F1' }} # App Service Plan SKU (F1=Free, B1=Basic, S1=Standard)
+  # Read subscription id from repository variable first, otherwise fall back to the secret.
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    outputs:
+      webAppName: ${{ steps.deploy-infra.outputs.webAppName }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        id: validate-inputs
+        run: |
+          set -euo pipefail
+          echo "::group::Validate inputs"
+          echo "Validating workflow inputs..."
+
+          # Read values from environment
+          SKU="$APP_SERVICE_PLAN_SKU"
+          LOCATION="$AZURE_LOCATION"
+          WEBAPP_NAME="$AZURE_WEBAPP_NAME"
+
+          # Validate SKU against a short allowlist
+          ALLOWED_SKUS=(F1 B1 S1)
+          if [[ ! " ${ALLOWED_SKUS[*]} " =~ " ${SKU} " ]]; then
+            echo "::error title=Invalid App Service Plan SKU::APP_SERVICE_PLAN_SKU='${SKU}' is not valid. Allowed: ${ALLOWED_SKUS[*]}"
+            echo "::error::Set APP_SERVICE_PLAN_SKU via repository Variables (Settings → Variables → Actions) or update the workflow."
+            echo "::endgroup::"
+            exit 1
+          else
+            echo "::notice title=SKU OK::APP_SERVICE_PLAN_SKU='${SKU}'"
+          fi
+
+          # Validate location against a small allowlist
+          ALLOWED_LOCS=(uksouth eastus westeurope northeurope centralus westus)
+          if [[ ! " ${ALLOWED_LOCS[*]} " =~ " ${LOCATION} " ]]; then
+            echo "::error title=Invalid Azure Location::AZURE_LOCATION='${LOCATION}' is not allowed. Allowed: ${ALLOWED_LOCS[*]}"
+            echo "::endgroup::"
+            exit 1
+          else
+            echo "::notice title=Location OK::AZURE_LOCATION='${LOCATION}'"
+          fi
+
+          # Validate web app name: DNS label rules (2-60 chars, alphanumeric and hyphens, cannot start or end with hyphen)
+          if [[ -z "${WEBAPP_NAME}" ]]; then
+            echo "::error title=Missing Web App Name::AZURE_WEBAPP_NAME is empty. Set a repository variable named AZURE_WEBAPP_NAME or update the workflow default."
+            echo "::endgroup::"
+            exit 1
+          fi
+          if [[ ${#WEBAPP_NAME} -lt 2 || ${#WEBAPP_NAME} -gt 60 ]]; then
+            echo "::error title=Invalid Web App Name Length::AZURE_WEBAPP_NAME must be between 2 and 60 characters. Current length=${#WEBAPP_NAME}"
+            echo "::endgroup::"
+            exit 1
+          fi
+          if [[ ! "${WEBAPP_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$ ]]; then
+            echo "::error title=Invalid Web App Name Format::AZURE_WEBAPP_NAME='${WEBAPP_NAME}' must start and end with an alphanumeric character and may contain hyphens in between."
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          echo "::notice title=Web App Name OK::AZURE_WEBAPP_NAME='${WEBAPP_NAME}'"
+          echo "::endgroup::"
+          echo "::notice::All inputs look good: SKU=${SKU}, LOCATION=${LOCATION}, WEBAPP_NAME=${WEBAPP_NAME}"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create Resource Group
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az group create \
+              --name ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --location ${{ env.AZURE_LOCATION }}
+
+      - name: Deploy Azure Infrastructure
+        id: deploy-infra
+        uses: azure/arm-deploy@v2
+        with:
+          subscriptionId: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: ./infrastructure/main.bicep
+          parameters: >
+            webAppName=${{ env.AZURE_WEBAPP_NAME }}
+            location=${{ env.AZURE_LOCATION }}
+            appServicePlanSku=${{ env.APP_SERVICE_PLAN_SKU }}
+            nodeVersion=22-lts
+          failOnStdErr: false
+
+      - name: Azure Logout
+        if: always()
+        run: az logout
+
+  build:
+    runs-on: ubuntu-latest
+    needs: infrastructure
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build library
+        run: npm run build
+
+      - name: Build demo app for production
+        run: npm run build:demo
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-app
+          path: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+
+  deploy:
+    permissions:
+      contents: none
+    runs-on: ubuntu-latest
+    needs: [infrastructure, build]
+    environment:
+      name: "Production"
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: node-app
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: "Deploy to Azure Web App"
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ needs.infrastructure.outputs.webAppName }}
+          package: .
+
+      - name: Azure Logout
+        if: always()
+        run: az logout

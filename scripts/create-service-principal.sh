@@ -72,6 +72,33 @@ if [[ -z "$SUBSCRIPTION_ID" ]]; then
   fi
 fi
 
+# If no GitHub token was provided via CLI, try to read it from a .env file (do not export or print it)
+if [[ -z "$GITHUB_TOKEN" && -f .env ]]; then
+  # Prefer GITHUB_TOKEN, fall back to GITHUB_PAT
+  read_env_var() {
+    local key="$1"
+    local val
+    val=$(grep -m1 -E "^${key}=" .env || true)
+    if [[ -n "$val" ]]; then
+      # Remove key and equals, strip surrounding quotes if present
+      val=${val#${key}=}
+      val=${val%}
+      val=${val#}
+      echo "$val"
+    fi
+  }
+
+  TOKEN_FROM_ENV=$(read_env_var "GITHUB_TOKEN" || true)
+  if [[ -z "$TOKEN_FROM_ENV" ]]; then
+    TOKEN_FROM_ENV=$(read_env_var "GITHUB_PAT" || true)
+  fi
+  if [[ -n "$TOKEN_FROM_ENV" ]]; then
+    GITHUB_TOKEN="$TOKEN_FROM_ENV"
+    # Do not print the token; just indicate we loaded one
+    echo "Loaded GitHub token from .env (will use it for gh authentication)."
+  fi
+fi
+
 echo "Using subscription: $SUBSCRIPTION_ID"
 echo "Service principal name: $NAME"
 echo "Role: $ROLE"
@@ -120,6 +147,14 @@ cat > "$OUTPUT_FILE" <<JSON
 }
 JSON
 
+# Prefer subscriptionId from the generated JSON when uploading the separate secret
+SUBSCRIPTION_ID_FROM_JSON=$(jq -r '.subscriptionId // empty' "$OUTPUT_FILE" 2>/dev/null || true)
+if [[ -n "$SUBSCRIPTION_ID_FROM_JSON" ]]; then
+  SUBSCRIPTION_ID_TO_UPLOAD="$SUBSCRIPTION_ID_FROM_JSON"
+else
+  SUBSCRIPTION_ID_TO_UPLOAD="$SUBSCRIPTION_ID"
+fi
+
 echo
 echo "Service principal created. Credentials written to: $OUTPUT_FILE"
 echo
@@ -147,10 +182,58 @@ if [[ $SET_SECRETS -eq 1 ]]; then
       fi
     fi
     # AZURE_CREDENTIALS
-    gh secret set AZURE_CREDENTIALS --body "$(cat "$OUTPUT_FILE")" || echo "Failed to set AZURE_CREDENTIALS via gh"
-    # AZURE_SUBSCRIPTION_ID
-    echo -n "$SUBSCRIPTION_ID" | gh secret set AZURE_SUBSCRIPTION_ID || echo "Failed to set AZURE_SUBSCRIPTION_ID via gh"
-    echo "Secrets uploaded (or attempted). Verify in repository Settings → Secrets and variables → Actions."
+    upload_failed=0
+
+    upload_secret() {
+      local name="$1"
+      local body="$2"
+      if ! echo -n "$body" | gh secret set "$name" -R "$REPO" 2>/tmp/gh_err; then
+        upload_failed=1
+        return 1
+      fi
+      return 0
+    }
+
+    # Determine repo (owner/repo) to pass to gh; fall back to current directory's origin
+    REPO=""
+    if gh repo view --json nameWithOwner >/dev/null 2>&1; then
+      REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+    else
+      # Try to read from git remote
+      REPO=$(git remote get-url origin 2>/dev/null || true)
+      # Convert git@github.com:owner/repo.git to owner/repo
+      REPO=${REPO#git@github.com:}
+      REPO=${REPO#https://github.com/}
+      REPO=${REPO%.git}
+    fi
+
+    # Upload AZURE_CREDENTIALS
+    if ! upload_secret AZURE_CREDENTIALS "$(cat "$OUTPUT_FILE")"; then
+      echo "Failed to set AZURE_CREDENTIALS via gh"
+    fi
+
+    # Upload AZURE_SUBSCRIPTION_ID
+    if ! upload_secret AZURE_SUBSCRIPTION_ID "$SUBSCRIPTION_ID"; then
+      echo "Failed to set AZURE_SUBSCRIPTION_ID via gh"
+    fi
+
+    if [[ $upload_failed -eq 1 ]]; then
+      echo
+      echo "Troubleshooting: gh authentication & permissions"
+      echo "--- gh auth status ---"
+      gh auth status || true
+      echo "--- try fetching repository public key (permission check) ---"
+      if ! gh api repos/${REPO}/actions/secrets/public-key -q '.key' 2>/tmp/gh_err; then
+        echo "Failed to fetch repo public key. Inspect error below:"
+        sed -n '1,200p' /tmp/gh_err || true
+        echo "Common causes: token lacks 'Secrets (Actions) -> Read & write' permission for repository, token not authorized for repo, or org restrictions (SSO)."
+      else
+        echo "Repository public key fetched successfully; problem may be with upload encryption or gh client."
+      fi
+      echo "Check the token permissions and that the token is authorized for the repository." 
+    else
+      echo "Secrets uploaded successfully. Verify in repository Settings → Secrets and variables → Actions."
+    fi
   else
     echo "gh CLI not found; cannot upload secrets automatically. Install gh and authenticate, or set secrets manually in GitHub." >&2
   fi
