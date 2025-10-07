@@ -194,6 +194,16 @@ if [[ $SET_SECRETS -eq 1 ]]; then
       return 0
     }
 
+    upload_variable() {
+      local name="$1"
+      local body="$2"
+      if ! echo -n "$body" | gh variable set "$name" -R "$REPO" 2>/tmp/gh_var_err; then
+        upload_failed=1
+        return 1
+      fi
+      return 0
+    }
+
     # Determine repo (owner/repo) to pass to gh; fall back to current directory's origin
     REPO=""
     if gh repo view --json nameWithOwner >/dev/null 2>&1; then
@@ -213,10 +223,8 @@ if [[ $SET_SECRETS -eq 1 ]]; then
     fi
 
     # Create/update repository variable AZURE_SUBSCRIPTION_ID (so workflows can use vars.AZURE_SUBSCRIPTION_ID)
-    if ! gh api --method PUT "/repos/${REPO}/actions/variables/AZURE_SUBSCRIPTION_ID" -f value="$SUBSCRIPTION_ID_TO_UPLOAD" 2>/tmp/gh_var_err; then
+    if ! upload_variable AZURE_SUBSCRIPTION_ID $SUBSCRIPTION_ID_TO_UPLOAD; then
       echo "Failed to create/update repository variable AZURE_SUBSCRIPTION_ID" >&2
-      upload_failed=1
-      echo "Error details:"; sed -n '1,200p' /tmp/gh_var_err || true
     fi
 
     if [[ $upload_failed -eq 1 ]]; then
