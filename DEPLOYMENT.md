@@ -192,9 +192,11 @@ Example (non-interactive):
 
    - Value: Your Azure subscription ID (e.g., `12345678-1234-1234-1234-123456789abc`)
 
-   **AZURE_RESOURCE_GROUP**
+   **AZURE_RESOURCE_GROUP** (repository Variable)
 
    - Value: Name for your resource group (e.g., `simple-react-router-rg`)
+
+Note: the workflow reads the resource group from a repository Variable named `AZURE_RESOURCE_GROUP`. If the variable is not set, the workflow falls back to the default resource group name `simple-react-router-rg` via the `AZURE_RESOURCE_GROUP_NAME` environment variable in the workflow.
 
 ### 3. Update Workflow Configuration (Optional)
 
@@ -204,7 +206,7 @@ Example (non-interactive):
 
    ```yaml
    env:
-     AZURE_WEBAPP_NAME: simple-react-router # Your web app name
+     AZURE_WEBAPP_NAME: simple-react-router-webapp # Your web app name (default includes '-webapp' suffix)
      AZURE_WEBAPP_PACKAGE_PATH: "dev/dist"
      NODE_VERSION: "22.x"
      AZURE_LOCATION: "eastus" # Azure region

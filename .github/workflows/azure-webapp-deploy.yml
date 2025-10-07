@@ -7,10 +7,10 @@
 #    az ad sp create-for-rbac --name "simple-react-router-deploy" --role contributor \
 #      --scopes /subscriptions/{subscription-id} --sdk-auth
 #
-# 2. Create the following secrets in your repository (Settings > Secrets and variables > Actions):
-#    - AZURE_CREDENTIALS: The entire JSON output from step 1
-#    - AZURE_SUBSCRIPTION_ID: Your Azure subscription ID (or create a repository Variable named AZURE_SUBSCRIPTION_ID instead)
-#    - AZURE_RESOURCE_GROUP: Name of the resource group to create/use (e.g., 'simple-react-router-rg')
+# 2. Create the following secrets and repository variables in your repository (Settings > Secrets and variables > Actions):
+#    - AZURE_CREDENTIALS (secret): The entire JSON output from step 1
+#    - AZURE_SUBSCRIPTION_ID (secret or repository Variable): Your Azure subscription ID
+#    - AZURE_RESOURCE_GROUP (repository Variable): Name of the resource group to create/use (e.g., 'simple-react-router-rg')
 #
 # 3. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
 #
@@ -28,9 +28,9 @@ on:
 
 env:
   # Read the web app name from a GitHub repository variable named `AZURE_WEBAPP_NAME`.
-  # If the variable is not set, fall back to the existing default name.
+  # If the variable is not set, fall back to a default with a clear suffix to reduce naming collisions.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
-  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router' }}
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router-webapp' }}
   AZURE_WEBAPP_PACKAGE_PATH: "dev/dist" # set this to the path to your web app project, defaults to the repository root
   NODE_VERSION: "22.x" # set this to the node version to use
   # Read the Azure region from a GitHub repository variable named `AZURE_LOCATION`.
@@ -43,6 +43,10 @@ env:
   APP_SERVICE_PLAN_SKU: ${{ vars.APP_SERVICE_PLAN_SKU || 'F1' }} # App Service Plan SKU (F1=Free, B1=Basic, S1=Standard)
   # Read subscription id from repository variable first, otherwise fall back to the secret.
   AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+  # Read the Resource Group name from a repository variable named `AZURE_RESOURCE_GROUP`.
+  # If the variable is not set, fall back to a sensible default.
+  # NOTE: we intentionally do not read this value from a secret; use a repository Variable instead.
+  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP || 'simple-react-router-rg' }}
 
 permissions:
   contents: read
@@ -120,7 +124,7 @@ jobs:
         with:
           inlineScript: |
             az group create \
-              --name ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --name ${{ env.AZURE_RESOURCE_GROUP_NAME }} \
               --location ${{ env.AZURE_LOCATION }}
 
       - name: Deploy Azure Infrastructure
@@ -128,7 +132,7 @@ jobs:
         uses: azure/arm-deploy@v2
         with:
           subscriptionId: ${{ env.AZURE_SUBSCRIPTION_ID }}
-          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP_NAME }}
           template: ./infrastructure/main.bicep
           parameters: >
             webAppName=${{ env.AZURE_WEBAPP_NAME }}

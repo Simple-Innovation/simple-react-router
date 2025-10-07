@@ -280,7 +280,11 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 
    - `AZURE_CREDENTIALS`: Full JSON output from step 1
    - `AZURE_SUBSCRIPTION_ID`: Your Azure subscription ID
-   - `AZURE_RESOURCE_GROUP`: Resource group name (e.g., `simple-react-router-rg`)
+
+- `AZURE_RESOURCE_GROUP` (repository Variable): Resource group name (e.g., `simple-react-router-rg`)
+  Note: the workflow reads the resource group from a repository Variable named `AZURE_RESOURCE_GROUP`. If the variable is not set, the workflow falls back to the default name `simple-react-router-rg` via the `AZURE_RESOURCE_GROUP_NAME` environment variable.
+
+  The workflow's default web app name includes a `-webapp` suffix to reduce naming collisions: `simple-react-router-webapp`.
 
 3. **Deploy**:
    - Push to `main` branch or manually trigger the workflow
