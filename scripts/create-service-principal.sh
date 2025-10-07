@@ -212,9 +212,11 @@ if [[ $SET_SECRETS -eq 1 ]]; then
       echo "Failed to set AZURE_CREDENTIALS via gh"
     fi
 
-    # Upload AZURE_SUBSCRIPTION_ID
-    if ! upload_secret AZURE_SUBSCRIPTION_ID "$SUBSCRIPTION_ID"; then
-      echo "Failed to set AZURE_SUBSCRIPTION_ID via gh"
+    # Create/update repository variable AZURE_SUBSCRIPTION_ID (so workflows can use vars.AZURE_SUBSCRIPTION_ID)
+    if ! gh api --method PUT "/repos/${REPO}/actions/variables/AZURE_SUBSCRIPTION_ID" -f value="$SUBSCRIPTION_ID_TO_UPLOAD" 2>/tmp/gh_var_err; then
+      echo "Failed to create/update repository variable AZURE_SUBSCRIPTION_ID" >&2
+      upload_failed=1
+      echo "Error details:"; sed -n '1,200p' /tmp/gh_var_err || true
     fi
 
     if [[ $upload_failed -eq 1 ]]; then
