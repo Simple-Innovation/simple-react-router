@@ -74,13 +74,40 @@ if [[ $AUTO_YES -ne 1 ]]; then
 fi
 
 echo "Creating service principal..."
-set -x
-az ad sp create-for-rbac \
+
+# Create the service principal (without --sdk-auth to avoid deprecation warnings). The command
+# returns a minimal JSON with appId, password and tenant which we use to assemble an SDK-style
+# JSON file compatible with azure/login action.
+SP_JSON=$(az ad sp create-for-rbac \
   --name "$NAME" \
   --role "$ROLE" \
   --scopes "/subscriptions/${SUBSCRIPTION_ID}" \
-  --sdk-auth > "$OUTPUT_FILE"
-set +x
+  -o json)
+
+APP_ID=$(echo "$SP_JSON" | jq -r '.appId // .clientId')
+PASSWORD=$(echo "$SP_JSON" | jq -r '.password // .clientSecret')
+TENANT=$(echo "$SP_JSON" | jq -r '.tenant')
+
+if [[ -z "$APP_ID" || -z "$PASSWORD" || -z "$TENANT" || "$APP_ID" == "null" ]]; then
+  echo "Error: failed to create service principal or parse response:" >&2
+  echo "$SP_JSON" >&2
+  exit 5
+fi
+
+cat > "$OUTPUT_FILE" <<JSON
+{
+  "clientId": "$APP_ID",
+  "clientSecret": "$PASSWORD",
+  "subscriptionId": "$SUBSCRIPTION_ID",
+  "tenantId": "$TENANT",
+  "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+  "resourceManagerEndpointUrl": "https://management.azure.com/",
+  "activeDirectoryGraphResourceId": "https://graph.windows.net/",
+  "sqlManagementEndpointUrl": "https://management.core.windows.net:8443/",
+  "galleryEndpointUrl": "https://gallery.azure.com/",
+  "managementEndpointUrl": "https://management.core.windows.net/"
+}
+JSON
 
 echo
 echo "Service principal created. Credentials written to: $OUTPUT_FILE"

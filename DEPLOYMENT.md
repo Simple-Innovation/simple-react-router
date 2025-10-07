@@ -112,6 +112,8 @@ The command will output JSON credentials. **Save this entire JSON output** - you
 
 Alternatively, use the included helper script `scripts/create-service-principal.sh` which wraps the command and saves the JSON for you.
 
+Note: the `--sdk-auth` flag is deprecated in recent `az` releases and will be removed in the future. The helper script avoids this warning by creating the service principal and assembling the SDK-style JSON itself, producing an output compatible with the `AZURE_CREDENTIALS` secret used by the GitHub Action `azure/login`.
+
 Example (interactive):
 
 ```bash
