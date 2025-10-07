@@ -1,63 +1,80 @@
 name: Destroy Azure Resource Group (safe)
 
 env:
-  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME || 'simple-react-router-rg' }}
-  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || '' }}
+    AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME || 'simple-react-router-rg' }}
+    AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || '' }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      resource-group:
-        description: 'Name of the Azure resource group to delete (optional; falls back to repository Variable AZURE_RESOURCE_GROUP_NAME)'
-        required: false
-      subscription-id:
-        description: 'Azure subscription ID (optional; falls back to repository Variable AZURE_SUBSCRIPTION_ID)'
-        required: false
-      confirm:
-        description: 'Type the resource group name again to confirm destruction (safety check)'
-        required: true
-      wait:
-        description: 'Whether to wait for the deletion to complete (true/false)'
-        required: false
-        default: 'true'
+    workflow_dispatch:
+        inputs:
+            resource-group:
+                description: "Name of the Azure resource group to delete (optional; falls back to repository Variable AZURE_RESOURCE_GROUP_NAME)"
+                required: false
+            subscription-id:
+                description: "Azure subscription ID (optional; falls back to repository Variable AZURE_SUBSCRIPTION_ID)"
+                required: false
+            confirm:
+                description: "Type the resource group name again to confirm destruction (safety check)"
+                required: true
+            wait:
+                description: "Whether to wait for the deletion to complete (true/false)"
+                required: false
+                default: "true"
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  destroy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    destroy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          subscription-id: ${{ github.event.inputs.subscription-id || env.AZURE_SUBSCRIPTION_ID }}
+            - name: Azure Login
+              uses: azure/login@v2
+              with:
+                  creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Dry-run show resource group and resources (human-friendly)
-        id: dry-run
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            set -euo pipefail
+            - name: Set Azure subscription (if provided)
+              if: ${{ github.event.inputs['subscription-id'] != '' || env.AZURE_SUBSCRIPTION_ID != '' }}
+              run: |
+                  set -euo pipefail
+                  SUB="${{ github.event.inputs.subscription-id || env.AZURE_SUBSCRIPTION_ID }}"
+                  if [ -n "$SUB" ]; then
+                    echo "Setting subscription to $SUB"
+                    az account set --subscription "$SUB"
+                  else
+                    echo "No subscription-id provided; using subscription from login credentials."
+                  fi
 
-            RG="${{ github.event.inputs.resource-group || env.AZURE_RESOURCE_GROUP_NAME }}"
+            - name: Verify Azure account
+              run: |
+                  set -euo pipefail
+                  echo "Azure account info:"
+                  az account show -o table || echo "Unable to show account; login may have failed."
 
-            if [ -z "$RG" ]; then
-              echo "No resource group specified. Set input 'resource-group' or repository Variable AZURE_RESOURCE_GROUP_NAME."
-              exit 1
-            fi
+            - name: Dry-run show resource group and resources (human-friendly)
+              id: dry-run
+              uses: azure/cli@v2
+              with:
+                  inlineScript: |
+                      set -euo pipefail
 
-            echo "Resource group summary for: $RG"
-            az group show --name "$RG" -o table || echo "Resource group '$RG' not found or access denied."
+                      RG="${{ github.event.inputs.resource-group || env.AZURE_RESOURCE_GROUP_NAME }}"
 
-            echo
-            echo "Resources in '$RG' (summary):"
-            az resource list --resource-group "$RG" --query '[].{name:name,type:type,location:location}' -o table || echo "No resources or unable to list resources."
+                      if [ -z "$RG" ]; then
+                        echo "No resource group specified. Set input 'resource-group' or repository Variable AZURE_RESOURCE_GROUP_NAME."
+                        exit 1
+                      fi
 
-            COUNT=$(az resource list --resource-group "$RG" --query 'length(@)' -o tsv || echo 0)
-            echo
-            echo "Resource count: $COUNT"
+                      echo "Resource group summary for: $RG"
+                      az group show --name "$RG" -o table || echo "Resource group '$RG' not found or access denied."
+
+                      echo
+                      echo "Resources in '$RG' (summary):"
+                      az resource list --resource-group "$RG" --query '[].{name:name,type:type,location:location}' -o table || echo "No resources or unable to list resources."
+
+                      COUNT=$(az resource list --resource-group "$RG" --query 'length(@)' -o tsv || echo 0)
+                      echo
+                      echo "Resource count: $COUNT"
