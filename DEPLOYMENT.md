@@ -182,21 +182,20 @@ Example (non-interactive):
 
 1. Open your GitHub repository
 2. Go to **Settings** > **Secrets and variables** > **Actions**
-3. Create the following secrets:
+3. Create the following secrets and repository variables:
 
-   **AZURE_CREDENTIALS**
+   - `AZURE_CREDENTIALS` (secret)
 
-   - Value: The entire JSON output from step 1
+     - Value: The entire JSON output from step 1
 
-   **AZURE_SUBSCRIPTION_ID**
+   - `AZURE_SUBSCRIPTION_ID` (secret)
 
-   - Value: Your Azure subscription ID (e.g., `12345678-1234-1234-1234-123456789abc`)
+     - Value: Your Azure subscription ID (e.g., `12345678-1234-1234-1234-123456789abc`)
 
-   **AZURE_RESOURCE_GROUP** (repository Variable)
+   - `AZURE_RESOURCE_GROUP` (repository Variable)
+     - Value: Name for your resource group (e.g., `simple-react-router-rg`)
 
-   - Value: Name for your resource group (e.g., `simple-react-router-rg`)
-
-Note: the workflow reads the resource group from a repository Variable named `AZURE_RESOURCE_GROUP`. If the variable is not set, the workflow falls back to the default resource group name `simple-react-router-rg` via the `AZURE_RESOURCE_GROUP_NAME` environment variable in the workflow.
+Note: this workflow requires `AZURE_RESOURCE_GROUP` to be a repository Variable (not a secret). Set it under Settings → Variables → Actions.
 
 ### 3. Update Workflow Configuration (Optional)
 

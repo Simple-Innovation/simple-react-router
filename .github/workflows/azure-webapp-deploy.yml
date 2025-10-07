@@ -44,9 +44,8 @@ env:
   # Read subscription id from repository variable first, otherwise fall back to the secret.
   AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
   # Read the Resource Group name from a repository variable named `AZURE_RESOURCE_GROUP`.
-  # If the variable is not set, fall back to a sensible default.
-  # NOTE: we intentionally do not read this value from a secret; use a repository Variable instead.
-  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP || 'simple-react-router-rg' }}
+  # This workflow requires that repository Variable to be set. Do NOT store the resource group name as a secret.
+  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP }}
 
 permissions:
   contents: read
@@ -113,6 +112,15 @@ jobs:
           echo "::notice title=Web App Name OK::AZURE_WEBAPP_NAME='${WEBAPP_NAME}'"
           echo "::endgroup::"
           echo "::notice::All inputs look good: SKU=${SKU}, LOCATION=${LOCATION}, WEBAPP_NAME=${WEBAPP_NAME}"
+
+          # Validate resource group variable is set (we require a repository Variable named AZURE_RESOURCE_GROUP)
+          if [[ -z "${AZURE_RESOURCE_GROUP_NAME-}" ]]; then
+            echo "::error title=Missing Resource Group Variable::Repository Variable AZURE_RESOURCE_GROUP is not set. Create it under Settings → Variables → Actions and set the resource group name."
+            echo "::endgroup::"
+            exit 1
+          else
+            echo "::notice title=Resource Group OK::AZURE_RESOURCE_GROUP='${AZURE_RESOURCE_GROUP_NAME}'"
+          fi
 
       - name: Azure Login
         uses: azure/login@v2
