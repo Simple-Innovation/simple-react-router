@@ -78,3 +78,55 @@ jobs:
                       COUNT=$(az resource list --resource-group "$RG" --query 'length(@)' -o tsv || echo 0)
                       echo
                       echo "Resource count: $COUNT"
+
+            - name: Confirm destruction
+              run: |
+                  set -euo pipefail
+
+                  RG="${{ github.event.inputs.resource-group || env.AZURE_RESOURCE_GROUP_NAME }}"
+                  CONFIRM="${{ github.event.inputs.confirm || '' }}"
+
+                  if [ -z "$RG" ]; then
+                    echo "No resource group resolved; cannot confirm."
+                    exit 1
+                  fi
+
+                  if [ -z "$CONFIRM" ]; then
+                    echo "Confirmation input 'confirm' is empty. Please type the resource group name to confirm destruction."
+                    exit 1
+                  fi
+
+                  if [ "$CONFIRM" != "$RG" ]; then
+                    echo "Confirmation mismatch. Expected: '$RG'  Received: '$CONFIRM'"
+                    echo "Aborting to avoid accidental deletion."
+                    exit 1
+                  fi
+
+                  echo "Confirmation matches resource group name. Safe to proceed."
+
+            - name: Delete resource group
+              id: delete-rg
+              uses: azure/cli@v2
+              with:
+                  inlineScript: |
+                      set -euo pipefail
+
+                      RG="${{ github.event.inputs.resource-group || env.AZURE_RESOURCE_GROUP_NAME }}"
+                      WAIT="${{ github.event.inputs.wait || 'true' }}"
+
+                      if [ -z "$RG" ]; then
+                        echo "No resource group resolved; cannot delete."
+                        exit 1
+                      fi
+
+                      echo "Proceeding to delete resource group: $RG (wait=$WAIT)"
+
+                      if [ "${WAIT,,}" = "false" ] || [ "${WAIT,,}" = "no" ] || [ "${WAIT,,}" = "0" ]; then
+                        echo "Starting deletion (no-wait)."
+                        az group delete --name "$RG" --yes --no-wait
+                        echo "Delete requested. The operation is running asynchronously."
+                      else
+                        echo "Starting deletion and waiting for completion."
+                        az group delete --name "$RG" --yes
+                        echo "Deletion command completed. The resource group should be removed."
+                      fi
