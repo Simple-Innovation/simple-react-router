@@ -10,6 +10,7 @@ ROLE="contributor"
 SUBSCRIPTION_ID=""
 OUTPUT_FILE="azure-credentials.json"
 AUTO_YES=0
+SET_SECRETS=0
 
 usage() {
   cat <<EOF
@@ -40,6 +41,8 @@ while [[ $# -gt 0 ]]; do
       ROLE="$2"; shift 2;;
     --output)
       OUTPUT_FILE="$2"; shift 2;;
+    --set-secrets)
+      SET_SECRETS=1; shift 1;;
     --yes)
       AUTO_YES=1; shift 1;;
     -h|--help)
@@ -50,6 +53,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v az >/dev/null 2>&1 || { echo "az CLI is required but not found. Install it: https://aka.ms/InstallAzureCLIDeb" >&2; exit 3; }
+
+# Ensure jq is available for JSON parsing
+command -v jq >/dev/null 2>&1 || { echo "jq is required but not found. Install it with 'sudo apt-get install -y jq' or 'brew install jq'" >&2; exit 3; }
 
 # Determine subscription id if not provided
 if [[ -z "$SUBSCRIPTION_ID" ]]; then
@@ -117,7 +123,21 @@ echo "1) Copy the contents of $OUTPUT_FILE and add it to the GitHub repository s
 echo "   Settings → Secrets and variables → Actions → New repository secret (AZURE_CREDENTIALS)"
 echo "2) Add AZURE_SUBSCRIPTION_ID secret (value: $SUBSCRIPTION_ID)"
 echo
-echo "Tip: to set the secret using the GH CLI (if installed):"
-echo "  gh secret set AZURE_CREDENTIALS --body \"")"
+if [[ $SET_SECRETS -eq 1 ]]; then
+  if command -v gh >/dev/null 2>&1; then
+    echo "Uploading secrets to GitHub using gh..."
+    # AZURE_CREDENTIALS
+    gh secret set AZURE_CREDENTIALS --body "$(cat "$OUTPUT_FILE")" || echo "Failed to set AZURE_CREDENTIALS via gh"
+    # AZURE_SUBSCRIPTION_ID
+    echo -n "$SUBSCRIPTION_ID" | gh secret set AZURE_SUBSCRIPTION_ID || echo "Failed to set AZURE_SUBSCRIPTION_ID via gh"
+    echo "Secrets uploaded (or attempted). Verify in repository Settings → Secrets and variables → Actions."
+  else
+    echo "gh CLI not found; cannot upload secrets automatically. Install gh and authenticate, or set secrets manually in GitHub." >&2
+  fi
+else
+  echo "Tip: to set the secret using the GH CLI (if installed):"
+  echo "  gh secret set AZURE_CREDENTIALS --body \"$(cat $OUTPUT_FILE | sed -e 's/"/\\"/g')\""
+  echo "  echo -n \"$SUBSCRIPTION_ID\" | gh secret set AZURE_SUBSCRIPTION_ID"
+fi
 echo
 echo "Done."
