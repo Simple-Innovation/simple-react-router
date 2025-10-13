@@ -39,7 +39,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     serverFarmId: appServicePlan.id
     siteConfig: {
       linuxFxVersion: 'NODE|${nodeVersion}'
-      appCommandLine: 'npm start'
+      appCommandLine: 'npm install --production && npm start'
       appSettings: [
         {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
@@ -47,7 +47,15 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'true'
+          value: 'false'
+        }
+        {
+          name: 'NODE_ENV'
+          value: 'production'
+        }
+        {
+          name: 'PORT'
+          value: '8080'
         }
       ]
       alwaysOn: appServicePlanSku != 'F1' // Always On not available on Free tier

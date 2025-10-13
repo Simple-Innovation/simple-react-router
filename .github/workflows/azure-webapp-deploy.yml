@@ -205,11 +205,36 @@ jobs:
       - name: Build app for production
         run: npm run build
 
+      - name: Prepare deployment package
+        run: |
+          # Create a deployment directory
+          mkdir -p deploy-package
+          
+          # Copy built client files to dist folder
+          cp -r dev/dist deploy-package/dist
+          
+          # Copy built server files
+          cp -r server-dist deploy-package/server-dist
+          
+          # Copy package.json and package-lock.json for production dependencies
+          cp package.json package-lock.json deploy-package/
+          
+          # Create .deployment file to skip build (already built)
+          cat > deploy-package/.deployment << 'EOF'
+          [config]
+          SCM_DO_BUILD_DURING_DEPLOYMENT = false
+          EOF
+          
+          # Create a production-ready package.json (only production dependencies)
+          cd deploy-package
+          # Remove devDependencies from package.json for lighter deployment
+          node -e "const pkg=require('./package.json'); delete pkg.devDependencies; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));"
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+          path: deploy-package
 
   deploy:
     permissions:
