@@ -1,7 +1,7 @@
 name: Destroy Azure Resource Group (safe)
 
 env:
-    AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME || 'simple-react-router-rg' }}
+    AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME || '' }}
     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || '' }}
 
 on:

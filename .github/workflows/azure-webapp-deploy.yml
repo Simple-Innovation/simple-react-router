@@ -30,24 +30,24 @@ env:
   # Read the web app name from a GitHub repository variable named `AZURE_WEBAPP_NAME`.
   # If the variable is not set, fall back to a sensible default to reduce naming collisions.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
-  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router-web' }}
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME && vars.AZURE_WEBAPP_NAME || 'simple-react-router-web' }}
   AZURE_WEBAPP_PACKAGE_PATH: "dev/dist" # set this to the path to your web app project, defaults to the repository root
   NODE_VERSION: "22.x" # set this to the node version to use
   # Read the Azure region from a GitHub repository variable named `AZURE_LOCATION`.
   # If the variable is not set, fall back to 'uksouth'.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
-  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'uksouth' }} # Azure region for resources
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION && vars.AZURE_LOCATION || 'uksouth' }} # Azure region for resources
   # Read the App Service Plan SKU from a GitHub repository variable named `APP_SERVICE_PLAN_SKU`.
   # If the variable is not set, fall back to 'F1'.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
-  APP_SERVICE_PLAN_SKU: ${{ vars.APP_SERVICE_PLAN_SKU || 'F1' }} # App Service Plan SKU (F1=Free, B1=Basic, S1=Standard)
+  APP_SERVICE_PLAN_SKU: ${{ vars.APP_SERVICE_PLAN_SKU && vars.APP_SERVICE_PLAN_SKU || 'F1' }} # App Service Plan SKU (F1=Free, B1=Basic, S1=Standard)
   # Read subscription id from a repository variable named `AZURE_SUBSCRIPTION_ID`.
   # NOTE: we do NOT default to reading the subscription id from a secret; set it as a repository Variable.
   AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   # Read the Resource Group name from a repository variable named `AZURE_RESOURCE_GROUP_NAME`.
   # This workflow requires that repository Variable to be set. Do NOT store the resource group name as a secret.
   # If the repository Variable isn't set, fall back to a sensible default resource group name.
-  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME || 'simple-react-router-rg' }}
+  AZURE_RESOURCE_GROUP_NAME: ${{ vars.AZURE_RESOURCE_GROUP_NAME && vars.AZURE_RESOURCE_GROUP_NAME || 'simple-react-router-rg' }}
 
 permissions:
   contents: read

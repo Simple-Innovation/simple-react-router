@@ -36,7 +36,7 @@ The application has been upgraded from a static SPA deployment to a full-stack N
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │         Azure App Service               │
 │  ┌───────────────────────────────────┐  │
@@ -84,7 +84,7 @@ This runs:
 
 ### Deployment Package Structure
 
-```
+```text
 deploy-package/
 ├── dist/              # Built React app
 ├── server-dist/       # Compiled Express server
@@ -114,21 +114,21 @@ The server is pre-configured with example endpoints in `server/index.ts`:
 
 ### Health Check
 
-```
+```http
 GET /api/health
 Response: { status: 'ok', timestamp: '...' }
 ```
 
 ### Data Loader Example
 
-```
+```http
 GET /api/data/:id
 Response: { id: '123', data: '...' }
 ```
 
 ### Form Processing Example
 
-```
+```http
 POST /api/submit
 Body: { field1: 'value', field2: 'value' }
 Response: { success: true, message: '...' }

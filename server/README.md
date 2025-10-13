@@ -11,7 +11,7 @@ This Express server provides:
 
 ## Project Structure
 
-```
+```text
 server/
   index.ts          # Main server entry point
 server-dist/        # Compiled server code (generated)
@@ -20,7 +20,7 @@ dev/dist/          # Built React client app (generated)
 
 ## Development
 
-### Run the development server with hot reload:
+### Run the development server with hot reload
 
 ```bash
 npm run dev:server
@@ -28,7 +28,7 @@ npm run dev:server
 
 This will watch for changes in the `server/` directory and automatically restart.
 
-### Run the client dev server (Vite):
+### Run the client dev server (Vite)
 
 ```bash
 npm run dev
