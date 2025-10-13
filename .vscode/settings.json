@@ -15,5 +15,9 @@
     "westeurope",
     "westus",
     "xplat"
-  ]
+  ],
+  "github-actions.workflows.pinned.workflows": [],
+  "github-actions.diagnostics.enabled": true,
+  "github-actions.diagnostics.includeSecrets": false,
+  "github-actions.diagnostics.includeVariables": false
 }
