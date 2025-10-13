@@ -169,6 +169,7 @@ jobs:
         id: deploy-infra
         uses: azure/arm-deploy@v2
         with:
+          scope: resourceGroup
           subscriptionId: ${{ env.AZURE_SUBSCRIPTION_ID }}
           resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP_NAME }}
           template: ./infrastructure/main.bicep
@@ -243,7 +244,11 @@ jobs:
           # actual web app package (index.html, assets) lives in the dist folder
           # configured by AZURE_WEBAPP_PACKAGE_PATH (default: dev/dist). Point the
           # deploy action at that folder so index.html is deployed to the site root.
-          package: ./node-app/${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+          # actions/upload-artifact uploads the CONTENTS of the folder you point at
+          # (dev/dist) into the artifact root. When actions/download-artifact
+          # extracts it to ./node-app the built site files are at ./node-app/, not
+          # ./node-app/dev/dist. Point the deploy action at the artifact root.
+          package: ./node-app
 
       - name: Azure Logout
         if: always()

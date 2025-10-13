@@ -6,9 +6,9 @@ param location string = resourceGroup().location
 
 @description('The pricing tier for the App Service Plan')
 @allowed([
-  'F1'  // Free
-  'B1'  // Basic
-  'S1'  // Standard
+  'F1' // Free
+  'B1' // Basic
+  'S1' // Standard
   'P1V2' // Premium V2
 ])
 param appServicePlanSku string = 'F1'
@@ -39,10 +39,15 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     serverFarmId: appServicePlan.id
     siteConfig: {
       linuxFxVersion: 'NODE|${nodeVersion}'
+      appCommandLine: 'npm start'
       appSettings: [
         {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
           value: '~${nodeVersion}'
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'true'
         }
       ]
       alwaysOn: appServicePlanSku != 'F1' // Always On not available on Free tier
