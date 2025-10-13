@@ -5,12 +5,14 @@
 The application has been upgraded from a static SPA deployment to a full-stack Node.js application with Express server support.
 
 ### Previous Setup (Static Only)
+
 - ❌ Static file server using `serve` package
 - ❌ No server-side data loading
 - ❌ No server-side form processing
 - ❌ No API endpoints
 
 ### New Setup (Full-Stack)
+
 - ✅ Express server with API endpoints
 - ✅ Server-side data loaders
 - ✅ Server-side form processing
@@ -20,11 +22,13 @@ The application has been upgraded from a static SPA deployment to a full-stack N
 ## File Changes
 
 ### New Files
+
 - `server/index.ts` - Express server with API routes
 - `server/README.md` - Server documentation
 - `tsconfig.server.json` - TypeScript config for server
 
 ### Modified Files
+
 - `package.json` - Added Express, updated scripts
 - `.github/workflows/azure-webapp-deploy.yml` - Updated deployment process
 - `infrastructure/main.bicep` - Updated Azure configuration
@@ -57,6 +61,7 @@ The application has been upgraded from a static SPA deployment to a full-stack N
 ## Build Process
 
 ### Development
+
 ```bash
 # Run client dev server (Vite with HMR)
 npm run dev
@@ -66,16 +71,19 @@ npm run dev:server
 ```
 
 ### Production Build
+
 ```bash
 # Builds both client and server
 npm run build
 ```
 
 This runs:
+
 1. `vite build` → builds React app to `dev/dist/`
 2. `tsc --project tsconfig.server.json` → compiles server to `server-dist/`
 
 ### Deployment Package Structure
+
 ```
 deploy-package/
 ├── dist/              # Built React app
@@ -87,6 +95,7 @@ deploy-package/
 ## Azure Deployment Flow
 
 1. **Build Job** (GitHub Actions)
+
    - Installs dependencies
    - Runs tests
    - Builds client (Vite → `dev/dist/`)
@@ -104,18 +113,21 @@ deploy-package/
 The server is pre-configured with example endpoints in `server/index.ts`:
 
 ### Health Check
+
 ```
 GET /api/health
 Response: { status: 'ok', timestamp: '...' }
 ```
 
 ### Data Loader Example
+
 ```
 GET /api/data/:id
 Response: { id: '123', data: '...' }
 ```
 
 ### Form Processing Example
+
 ```
 POST /api/submit
 Body: { field1: 'value', field2: 'value' }
@@ -125,6 +137,7 @@ Response: { success: true, message: '...' }
 ## Using Server-Side Features in React
 
 ### Data Loading
+
 ```typescript
 // In your route component
 async function loadData(id: string) {
@@ -134,24 +147,25 @@ async function loadData(id: string) {
 ```
 
 ### Form Actions
+
 ```typescript
 // In your Form component
-import { Form } from './src/Form';
+import { Form } from "./src/Form";
 
 function MyForm() {
   async function handleSubmit(formData: FormData) {
-    const response = await fetch('/api/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(Object.fromEntries(formData))
+    const response = await fetch("/api/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.fromEntries(formData)),
     });
-    
+
     const result = await response.json();
     if (result.success) {
       // Handle success
     }
   }
-  
+
   return (
     <Form action={handleSubmit}>
       <input name="field1" />
@@ -164,6 +178,7 @@ function MyForm() {
 ## Next Steps
 
 1. **Install dependencies**
+
    ```bash
    npm install
    ```
@@ -171,13 +186,14 @@ function MyForm() {
 2. **Add your API endpoints** in `server/index.ts`
 
 3. **Test locally**
+
    ```bash
    # Build everything
    npm run build
-   
+
    # Start production server
    npm start
-   
+
    # Visit http://localhost:8080
    ```
 
@@ -189,6 +205,7 @@ function MyForm() {
 ## Environment Variables
 
 Set these in Azure App Service Configuration (if needed):
+
 - `NODE_ENV=production` (already set in Bicep)
 - `PORT=8080` (already set in Bicep)
 - Add your custom environment variables as needed
@@ -196,6 +213,7 @@ Set these in Azure App Service Configuration (if needed):
 ## Troubleshooting
 
 ### Build fails locally
+
 ```bash
 # Clear build artifacts
 rm -rf server-dist dev/dist node_modules
@@ -204,12 +222,15 @@ npm run build
 ```
 
 ### Server doesn't start
+
 Check that:
+
 - `server-dist/index.js` exists after build
 - `dev/dist/index.html` exists after build
 - Port 8080 is not already in use
 
 ### Azure deployment fails
+
 - Check GitHub Actions logs
 - Verify `AZURE_CREDENTIALS` secret is set
 - Ensure resource group and app service are created
@@ -222,7 +243,7 @@ Check that:
 ✅ **Form Processing** - Handle form submissions server-side  
 ✅ **Security** - Keep sensitive logic and secrets on the server  
 ✅ **SEO** - Potential for future SSR implementation  
-✅ **Single Deployment** - One deployment contains both frontend and backend  
+✅ **Single Deployment** - One deployment contains both frontend and backend
 
 ## Documentation
 
