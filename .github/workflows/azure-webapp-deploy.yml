@@ -207,6 +207,11 @@ jobs:
             "${{ vars.SQL_AZUREAD_ADMIN_USER || '' }}" \
             "${{ vars.SQL_AZUREAD_ADMIN_OBJECT_ID || '' }}"
 
+      - name: Wait for Azure AD configuration to propagate
+        run: |
+          echo "Waiting 60 seconds for Azure AD administrator configuration to propagate..."
+          sleep 60
+
       - name: Configure Managed Identity Database Access
         run: |
           echo "Configuring managed identity access to SQL Database..."
