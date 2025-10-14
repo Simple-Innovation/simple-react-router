@@ -193,6 +193,17 @@ jobs:
             sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
           failOnStdErr: false
 
+      - name: Configure Managed Identity Database Access
+        run: |
+          echo "Configuring managed identity access to SQL Database..."
+          bash ./scripts/configure-managed-identity.sh \
+            "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+            "${{ steps.deploy-infra.outputs.sqlServerName }}" \
+            "${{ steps.deploy-infra.outputs.sqlDatabaseName }}" \
+            "${{ steps.deploy-infra.outputs.webAppName }}" \
+            "sqladmin" \
+            "${{ secrets.SQL_ADMIN_PASSWORD }}"
+
       - name: Azure Logout
         if: always()
         run: az logout

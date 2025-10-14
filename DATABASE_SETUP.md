@@ -29,9 +29,24 @@ az deployment group create \
 - Contains numbers
 - Contains special characters
 
-### 2. Configure Managed Identity Access (Required)
+### 2. Configure Managed Identity Access (Automated)
 
-After deployment, you **must** grant the Web App's managed identity access to the database:
+**When using GitHub Actions deployment**, this step is now **automatically configured** during deployment! The workflow runs a script that grants the Web App's managed identity the necessary database permissions.
+
+**For manual deployments**, you can run the configuration script:
+
+```bash
+# From the repository root
+bash ./scripts/configure-managed-identity.sh \
+  <resource-group> \
+  <sql-server-name> \
+  <database-name> \
+  <web-app-name> \
+  <sql-admin-login> \
+  <sql-admin-password>
+```
+
+**Alternatively, you can manually grant permissions** using SQL:
 
 ```sql
 -- Connect to your SQL Database using Azure portal Query Editor or SSMS
@@ -65,6 +80,23 @@ Replace `[your-web-app-name]` with the actual name of your Web App (e.g., `simpl
 6. Review and create
 
 ### Step 2: Grant Managed Identity Access
+
+**Option A: Using the automated script (Recommended)**
+
+Download or clone the repository and run:
+
+```bash
+bash ./scripts/configure-managed-identity.sh \
+  <resource-group> \
+  <sql-server-name> \
+  <database-name> \
+  <web-app-name> \
+  <sql-admin-login> \
+  <sql-admin-password>
+```
+
+**Option B: Using Azure Portal Query Editor**
+
 1. Navigate to your SQL Server in Azure Portal
 2. Click on "Databases" → Select your database
 3. Click "Query editor (preview)" and sign in with SQL admin credentials
