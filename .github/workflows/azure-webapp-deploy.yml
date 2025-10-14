@@ -193,6 +193,13 @@ jobs:
             sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
           failOnStdErr: false
 
+      - name: Configure Azure AD Administrator for SQL Server
+        run: |
+          echo "Configuring Azure AD administrator for SQL Server..."
+          bash ./scripts/configure-azuread-admin.sh \
+            "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+            "${{ steps.deploy-infra.outputs.sqlServerName }}"
+
       - name: Configure Managed Identity Database Access
         run: |
           echo "Configuring managed identity access to SQL Database..."

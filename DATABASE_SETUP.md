@@ -104,9 +104,11 @@ bash ./scripts/configure-managed-identity.sh \
 
 ## Local Development Setup
 
-**Security Note**: The application only supports Azure Managed Identity authentication. SQL authentication has been disabled for security compliance.
+**Security Note**: The application uses Azure Managed Identity authentication in production. For local development and database administration, both SQL authentication (with admin credentials) and Azure AD authentication are supported.
 
-For local development, you must authenticate using Azure credentials:
+**Azure AD Authentication Setup**: During deployment, the workflow automatically configures an Azure AD administrator for the SQL Server, enabling Azure AD authentication. This allows you to connect using your Azure account credentials.
+
+For local development, you can authenticate using Azure credentials:
 
 ### 1. Install and configure Azure CLI
 
@@ -186,6 +188,29 @@ CREATE TABLE Users (
 Sample data is also automatically inserted if the table is empty.
 
 ## Troubleshooting
+
+### Issue: "The server is not currently configured to accept this token"
+
+**Error**: When trying to connect via Azure Portal Query Editor with Azure AD authentication, you get:
+```
+Microsoft Entra authentication
+Login failed for user. The server is not currently configured to accept this token
+```
+
+**Solution**: The SQL Server needs an Azure AD administrator configured. Run the configuration script:
+
+```bash
+bash ./scripts/configure-azuread-admin.sh \
+  <resource-group> \
+  <sql-server-name>
+```
+
+This script runs automatically during GitHub Actions deployment. For manual deployments, you need to run it after infrastructure deployment, or configure the Azure AD admin via Azure Portal:
+
+1. Navigate to your SQL Server in Azure Portal
+2. Click "Microsoft Entra ID" in the left menu
+3. Click "Set admin" and select your Azure AD user
+4. Click "Save"
 
 ### Issue: "Database not initialized" error
 

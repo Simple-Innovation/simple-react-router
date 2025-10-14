@@ -75,6 +75,56 @@ Initializes the database schema by creating the Users table and inserting sample
 - `sudo` access for installing `sqlcmd` (required in CI/CD environments)
 - SQL Server administrator credentials
 
+### configure-azuread-admin.sh
+
+Configures Azure AD administrator for SQL Server to enable Azure AD authentication.
+
+**Usage:**
+```bash
+./scripts/configure-azuread-admin.sh \
+  <resource-group> \
+  <sql-server-name> \
+  [admin-user] \
+  [admin-object-id]
+```
+
+**Parameters:**
+- `resource-group`: Azure resource group name
+- `sql-server-name`: SQL Server name (without .database.windows.net)
+- `admin-user`: (Optional) Azure AD admin user email or service principal name
+- `admin-object-id`: (Optional) Object ID of the admin user
+
+**Example:**
+```bash
+# Use current logged-in user as admin
+./scripts/configure-azuread-admin.sh \
+  simple-react-router-rg \
+  simple-react-router-web-sql
+
+# Specify a specific Azure AD user
+./scripts/configure-azuread-admin.sh \
+  simple-react-router-rg \
+  simple-react-router-web-sql \
+  user@example.com \
+  xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+**What it does:**
+- Enables Azure AD authentication on the SQL Server
+- Sets an Azure AD administrator for the SQL Server
+- Allows users to connect using Azure AD credentials (via Portal Query Editor, SSMS, etc.)
+- Required for CREATE USER ... FROM EXTERNAL PROVIDER to work
+
+**When to use:**
+- **Automatic**: This script runs automatically during GitHub Actions deployment (after infrastructure deployment)
+- **Manual deployments**: Run manually after deploying infrastructure with Bicep
+- **Troubleshooting**: Run if you get "The server is not currently configured to accept this token" error
+
+**Requirements:**
+- Azure CLI must be installed and authenticated (`az login`)
+- User running the script needs sufficient permissions to modify SQL Server settings
+- If not specifying admin-user/admin-object-id, script will use current logged-in user
+
 ### configure-managed-identity.sh
 
 Automatically configures managed identity access to Azure SQL Database by granting the Web App's system-assigned identity the necessary database permissions.
