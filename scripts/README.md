@@ -120,6 +120,13 @@ Configures Azure AD administrator for SQL Server to enable Azure AD authenticati
 - **Manual deployments**: Run manually after deploying infrastructure with Bicep
 - **Troubleshooting**: Run if you get "The server is not currently configured to accept this token" error
 
+**GitHub Actions Integration:**
+When running in GitHub Actions, you can optionally specify the Azure AD admin via repository variables:
+- `SQL_AZUREAD_ADMIN_USER`: Azure AD admin user email or service principal name
+- `SQL_AZUREAD_ADMIN_OBJECT_ID`: Object ID of the admin user
+
+If these variables are not set, the workflow will automatically use the current logged-in user (service principal).
+
 **Requirements:**
 - Azure CLI must be installed and authenticated (`az login`)
 - User running the script needs sufficient permissions to modify SQL Server settings

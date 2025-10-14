@@ -202,6 +202,19 @@ Example (non-interactive):
    - `AZURE_RESOURCE_GROUP_NAME` (repository Variable)
      - Value: Name for your resource group (e.g., `simple-react-router-rg`)
 
+   **Optional: Specify Azure AD Administrator for SQL Server**
+
+   If you want to use a specific Azure AD user or group as the SQL Server administrator (instead of auto-detection):
+
+   - `SQL_AZUREAD_ADMIN_USER` (repository Variable)
+     - Value: Azure AD admin user email or service principal name (e.g., `admin@yourdomain.com`)
+   
+   - `SQL_AZUREAD_ADMIN_OBJECT_ID` (repository Variable)
+     - Value: Object ID of the Azure AD admin user (e.g., `12345678-1234-1234-1234-123456789abc`)
+     - You can find this in Azure Portal → Azure Active Directory → Users → Select user → Object ID
+
+   **Note**: Both `SQL_AZUREAD_ADMIN_USER` and `SQL_AZUREAD_ADMIN_OBJECT_ID` must be provided together. If not provided, the workflow will automatically use the service principal as the Azure AD administrator.
+
 Note: this workflow requires `AZURE_RESOURCE_GROUP_NAME` to be a repository Variable (not a secret). Set it under Settings → Variables → Actions.
 
 ### 3. Update Workflow Configuration (Optional)

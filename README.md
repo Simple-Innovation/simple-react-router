@@ -278,13 +278,18 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 
 2. **Configure GitHub Secrets and Variables**:
 
-- `AZURE_CREDENTIALS`: Full JSON output from step 1
+Required:
+- `AZURE_CREDENTIALS` (secret): Full JSON output from step 1
+- `SQL_ADMIN_PASSWORD` (secret): A secure password for SQL Server admin
 - `AZURE_SUBSCRIPTION_ID` (repository Variable): Your Azure subscription ID
 
-  - `AZURE_WEBAPP_NAME` (repository Variable) — optional; defaults to `simple-react-router-web`
-  - `AZURE_RESOURCE_GROUP_NAME` (repository Variable) — optional; if not set the workflow defaults to `simple-react-router-rg`
+Optional:
+- `AZURE_WEBAPP_NAME` (repository Variable) — defaults to `simple-react-router-web`
+- `AZURE_RESOURCE_GROUP_NAME` (repository Variable) — defaults to `simple-react-router-rg`
+- `SQL_AZUREAD_ADMIN_USER` (repository Variable) — Azure AD admin user email (if you want a specific admin instead of auto-detection)
+- `SQL_AZUREAD_ADMIN_OBJECT_ID` (repository Variable) — Object ID of the Azure AD admin user (must be provided with SQL_AZUREAD_ADMIN_USER)
 
-  Note: the workflow defaults `AZURE_WEBAPP_NAME` to `simple-react-router-web` when not provided. You can override it by setting the repository Variable `AZURE_WEBAPP_NAME`. The workflow prefers the resource group be set in `AZURE_RESOURCE_GROUP_NAME` (repository Variable).
+Note: If `SQL_AZUREAD_ADMIN_USER` and `SQL_AZUREAD_ADMIN_OBJECT_ID` are not provided, the workflow will automatically use the current logged-in user (service principal) as the Azure AD administrator.
 
 3. **Deploy**:
 

@@ -13,7 +13,12 @@
 #    - AZURE_SUBSCRIPTION_ID (repository Variable): Your Azure subscription ID
 #    - AZURE_RESOURCE_GROUP_NAME (repository Variable): Name of the resource group to create/use (e.g., 'simple-react-router-rg')
 #
-# 3. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
+# 3. Optionally, configure Azure AD administrator for SQL Server (if you want a specific user instead of auto-detection):
+#    - SQL_AZUREAD_ADMIN_USER (repository Variable): Azure AD admin user email or service principal name
+#    - SQL_AZUREAD_ADMIN_OBJECT_ID (repository Variable): Object ID of the Azure AD admin user
+#    Note: Both variables must be provided together. If not provided, the current logged-in user (service principal) will be used.
+#
+# 4. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
 #
 # For more information on GitHub Actions for Azure: https://github.com/Azure/Actions
 # For more information on the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
@@ -198,7 +203,9 @@ jobs:
           echo "Configuring Azure AD administrator for SQL Server..."
           bash ./scripts/configure-azuread-admin.sh \
             "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
-            "${{ steps.deploy-infra.outputs.sqlServerName }}"
+            "${{ steps.deploy-infra.outputs.sqlServerName }}" \
+            "${{ vars.SQL_AZUREAD_ADMIN_USER || '' }}" \
+            "${{ vars.SQL_AZUREAD_ADMIN_OBJECT_ID || '' }}"
 
       - name: Configure Managed Identity Database Access
         run: |
