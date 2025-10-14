@@ -80,6 +80,8 @@ Automatically configures managed identity access to Azure SQL Database by granti
 - SQL Server must have Azure AD authentication enabled
 - The Web App must have a system-assigned managed identity enabled
 - You must have the SQL admin credentials from deployment
+- `sqlcmd` utility (automatically installed by the script if not present)
+- `sudo` access for installing `sqlcmd` (required in CI/CD environments)
 
 **Notes:**
 - This script is idempotent - safe to run multiple times without creating duplicates

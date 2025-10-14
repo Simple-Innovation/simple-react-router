@@ -73,15 +73,50 @@ echo ""
 echo "Executing SQL commands to grant managed identity access..."
 echo ""
 
-# Execute SQL commands using Azure CLI
-# Using -u flag to specify admin credentials
-az sql db execute \
-    --resource-group "$RESOURCE_GROUP" \
-    --server "$SQL_SERVER" \
-    --name "$DATABASE_NAME" \
-    --admin-user "$SQL_ADMIN_LOGIN" \
-    --admin-password "$SQL_ADMIN_PASSWORD" \
-    --query-text "$SQL_SCRIPT"
+# Check if sqlcmd is installed, if not install it
+if ! command -v sqlcmd &> /dev/null; then
+    echo "sqlcmd not found, installing..."
+    
+    # Add Microsoft repository and install sqlcmd
+    # Using non-interactive mode for CI/CD environments
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add - 2>/dev/null || true
+    
+    # Detect Ubuntu version
+    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "22.04")
+    
+    # Add the repository based on Ubuntu version
+    if [[ "$UBUNTU_VERSION" == "22.04" ]]; then
+        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+    elif [[ "$UBUNTU_VERSION" == "20.04" ]]; then
+        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+    else
+        # Default to 22.04 for newer versions
+        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+    fi
+    
+    # Update package lists and install sqlcmd
+    sudo apt-get update -qq
+    sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+    
+    # Add sqlcmd to PATH for this session
+    export PATH="$PATH:/opt/mssql-tools18/bin"
+    
+    echo "sqlcmd installed successfully"
+fi
+
+# Execute SQL commands using sqlcmd
+# -S: server name
+# -d: database name
+# -U: username
+# -P: password
+# -C: trust server certificate (required for Azure SQL with TLS 1.2+)
+# -Q: query to execute
+sqlcmd -S "${SQL_SERVER}.database.windows.net" \
+    -d "$DATABASE_NAME" \
+    -U "$SQL_ADMIN_LOGIN" \
+    -P "$SQL_ADMIN_PASSWORD" \
+    -C \
+    -Q "$SQL_SCRIPT"
 
 echo ""
 echo "============================================"
