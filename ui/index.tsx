@@ -44,9 +44,20 @@ function CreateUser() {
     const name = formData.get('name') as string;
     const email = formData.get('email') as string;
     
-    // Simulate API call
-    console.log('Creating user:', { name, email });
-    alert(`User created: ${name} (${email})`);
+    // Call the /api/submit endpoint
+    const response = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email }),
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      alert(`${result.message}\nUser: ${name} (${email})`);
+    } else {
+      alert('Failed to create user');
+    }
   }
   
   return (
