@@ -121,14 +121,6 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'SQL_DATABASE'
           value: sqlDatabaseName
         }
-        {
-          name: 'SQL_USER'
-          value: sqlAdminLogin
-        }
-        {
-          name: 'SQL_PASSWORD'
-          value: sqlAdminPassword
-        }
       ]
       alwaysOn: appServicePlanSku != 'F1' // Always On not available on Free tier
     }

@@ -29,9 +29,9 @@ az deployment group create \
 - Contains numbers
 - Contains special characters
 
-### 2. Configure Managed Identity Access (Recommended)
+### 2. Configure Managed Identity Access (Required)
 
-After deployment, grant the Web App's managed identity access to the database:
+After deployment, you **must** grant the Web App's managed identity access to the database:
 
 ```sql
 -- Connect to your SQL Database using Azure portal Query Editor or SSMS
@@ -72,18 +72,44 @@ Replace `[your-web-app-name]` with the actual name of your Web App (e.g., `simpl
 
 ## Local Development Setup
 
-For local development, you can connect to the Azure SQL Database:
+**Security Note**: The application only supports Azure Managed Identity authentication. SQL authentication has been disabled for security compliance.
 
-### 1. Create a .env file (not committed to git)
+For local development, you must authenticate using Azure credentials:
+
+### 1. Install and configure Azure CLI
+
+```bash
+# Install Azure CLI (if not already installed)
+# See: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
+
+# Login with your Azure account
+az login
+```
+
+### 2. Grant your Azure account access to the database
+
+Connect to the SQL Database using Azure portal Query Editor or SSMS with SQL admin credentials, then run:
+
+```sql
+-- Replace 'your-email@domain.com' with your Azure account email
+CREATE USER [your-email@domain.com] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [your-email@domain.com];
+ALTER ROLE db_datawriter ADD MEMBER [your-email@domain.com];
+ALTER ROLE db_ddladmin ADD MEMBER [your-email@domain.com];
+```
+
+### 3. Configure environment variables
+
+Create a `.env` file (not committed to git):
 
 ```bash
 SQL_SERVER=your-server-name.database.windows.net
 SQL_DATABASE=UsersDB
-SQL_USER=sqladmin
-SQL_PASSWORD=YourSecurePassword123!
 ```
 
-### 2. Allow your IP address
+**Note**: No SQL_USER or SQL_PASSWORD needed - Azure Managed Identity is used automatically.
+
+### 4. Allow your IP address
 
 Add your development machine's IP to the SQL Server firewall:
 
@@ -101,12 +127,14 @@ Or use Azure Portal:
 2. Click "Networking"
 3. Add your client IP address
 
-### 3. Run the application
+### 5. Run the application
 
 ```bash
 npm run dev:server  # Start Express server (port 8080)
 npm run dev         # In another terminal, start Vite dev server (port 3000)
 ```
+
+The application will use your Azure CLI credentials via `DefaultAzureCredential`.
 
 Visit `http://localhost:3000` to see the application.
 
@@ -132,8 +160,6 @@ Sample data is also automatically inserted if the table is empty.
 **Solution**: Ensure the Web App has environment variables configured:
 - `SQL_SERVER`
 - `SQL_DATABASE`
-- `SQL_USER`
-- `SQL_PASSWORD`
 
 These are automatically set by the Bicep template during deployment.
 
@@ -141,12 +167,13 @@ These are automatically set by the Bicep template during deployment.
 
 **Solution**: Grant the managed identity access to the database using the SQL commands in Step 2.
 
-### Issue: Cannot connect from local machine
+### Issue: Authentication error in local development
 
 **Solution**: 
-1. Check that your IP is allowed in SQL Server firewall rules
-2. Verify SQL authentication is enabled on the server
-3. Ensure connection string details are correct
+1. Ensure you are logged in to Azure CLI: `az login`
+2. Verify your Azure account has been granted access to the database (see Local Development Setup, Step 2)
+3. Check that your IP is allowed in SQL Server firewall rules
+4. Confirm `DefaultAzureCredential` is finding your Azure CLI credentials
 
 ### Issue: "Cannot read config file" during npm run lint
 
@@ -154,13 +181,14 @@ These are automatically set by the Bicep template during deployment.
 
 ## Security Best Practices
 
-1. **Never commit passwords or connection strings** to version control
-2. **Use managed identity** in production instead of SQL authentication
-3. **Rotate SQL admin password** regularly
+1. **Managed Identity only** - SQL authentication is disabled for security compliance
+2. **No credentials in code** - The application uses Azure Managed Identity exclusively
+3. **Rotate SQL admin password** regularly (used only for initial setup and emergencies)
 4. **Enable firewall rules** to restrict access to known IP addresses
 5. **Enable auditing** on the SQL Database for compliance
 6. **Use TLS 1.2+** for all connections (automatically configured)
 7. **Review connection logs** regularly in Azure Portal
+8. **Principle of least privilege** - Grant only necessary database permissions to managed identities
 
 ## Monitoring
 

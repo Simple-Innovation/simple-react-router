@@ -1,78 +1,36 @@
 import sql from "mssql";
 import { DefaultAzureCredential } from "@azure/identity";
 
-interface DbConfig {
-  server: string;
-  database: string;
-  user?: string;
-  password?: string;
-  options?: {
-    encrypt: boolean;
-    trustServerCertificate: boolean;
-  };
-  authentication?: {
-    type: string;
-    options: {
-      clientId?: string;
-      tenantId?: string;
-      credential?: DefaultAzureCredential;
-    };
-  };
-}
-
 export async function getDbConfig(): Promise<sql.config> {
   const server = process.env.SQL_SERVER;
   const database = process.env.SQL_DATABASE;
-  const user = process.env.SQL_USER;
-  const password = process.env.SQL_PASSWORD;
 
   if (!server || !database) {
     throw new Error("SQL_SERVER and SQL_DATABASE environment variables are required");
   }
 
-  // In Azure, use managed identity authentication
-  if (process.env.WEBSITE_INSTANCE_ID) {
-    console.log("Using Azure Managed Identity for SQL authentication");
-    const credential = new DefaultAzureCredential();
-    
-    // Get access token for Azure SQL Database
-    const tokenResponse = await credential.getToken("https://database.windows.net/.default");
-    
-    const config: sql.config = {
-      server,
-      database,
-      options: {
-        encrypt: true,
-        trustServerCertificate: false,
-      },
-      authentication: {
-        type: "azure-active-directory-access-token",
-        options: {
-          token: tokenResponse.token,
-        },
-      },
-    };
-    
-    return config;
-  }
-
-  // For local development, use SQL authentication
-  console.log("Using SQL authentication for database connection");
-  if (!user || !password) {
-    throw new Error("SQL_USER and SQL_PASSWORD are required for local development");
-  }
-
+  // Use Azure Managed Identity authentication only
+  console.log("Using Azure Managed Identity for SQL authentication");
+  const credential = new DefaultAzureCredential();
+  
+  // Get access token for Azure SQL Database
+  const tokenResponse = await credential.getToken("https://database.windows.net/.default");
+  
   const config: sql.config = {
     server,
     database,
-    user,
-    password,
     options: {
       encrypt: true,
-      trustServerCertificate: true, // For local development
+      trustServerCertificate: false,
+    },
+    authentication: {
+      type: "azure-active-directory-access-token",
+      options: {
+        token: tokenResponse.token,
+      },
     },
   };
-
+  
   return config;
 }
 

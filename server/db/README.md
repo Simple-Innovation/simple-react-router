@@ -1,6 +1,6 @@
 # Database Module
 
-This module handles Azure SQL Database connectivity with support for both managed identity (Azure) and SQL authentication (local development).
+This module handles Azure SQL Database connectivity using **Azure Managed Identity only** for enhanced security.
 
 ## Files
 
@@ -8,31 +8,27 @@ This module handles Azure SQL Database connectivity with support for both manage
 - **`init.ts`** - Database schema initialization and sample data
 - **`users.ts`** - User data access layer
 
-## Authentication Methods
+## Authentication Method
 
-### Production (Azure)
-When deployed to Azure App Service, the application uses **Azure Managed Identity** for authentication:
+The application uses **Azure Managed Identity** exclusively for authentication:
 - No credentials stored in code or configuration
 - Secure, automatic authentication using the Web App's system-assigned identity
 - Token-based authentication with Azure Active Directory
-
-### Local Development
-For local development, use SQL authentication:
-- Requires `SQL_USER` and `SQL_PASSWORD` environment variables
-- Connects directly to Azure SQL Database or local SQL Server
+- SQL authentication is NOT supported for security compliance
 
 ## Environment Variables
 
-Required for all environments:
+Required:
 - `SQL_SERVER` - SQL Server hostname (e.g., `myserver.database.windows.net`)
 - `SQL_DATABASE` - Database name (e.g., `UsersDB`)
 
-Additional for local development:
-- `SQL_USER` - SQL authentication username
-- `SQL_PASSWORD` - SQL authentication password
+## Local Development
 
-Auto-detected (set by Azure):
-- `WEBSITE_INSTANCE_ID` - Indicates running in Azure App Service
+For local development, you must use Azure Managed Identity authentication by running the application with Azure credentials:
+
+1. Install Azure CLI and login: `az login`
+2. The `DefaultAzureCredential` will automatically use your Azure CLI credentials
+3. Ensure your Azure account has been granted access to the SQL Database (see DATABASE_SETUP.md)
 
 ## Database Schema
 
@@ -101,7 +97,9 @@ On first initialization, the database is populated with sample users:
 
 ## Security
 
+- **Managed Identity only** - SQL authentication is disabled for security compliance
 - TLS encryption enabled for all connections
-- Managed identity eliminates credential management in production
+- No credentials stored in code, configuration, or environment variables
 - Parameterized queries prevent SQL injection
 - Connection strings never logged or exposed
+- Token-based authentication with automatic rotation

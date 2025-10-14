@@ -154,17 +154,18 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 
 The template provisions an Azure SQL Database with the following features:
 
-### Managed Identity Authentication
+### Managed Identity Authentication (Required)
 
-The Web App uses a **system-assigned managed identity** to connect to the SQL Database:
+The Web App uses **Azure Managed Identity exclusively** to connect to the SQL Database:
 - No credentials stored in application code or configuration
+- SQL authentication is disabled for security compliance
 - Azure automatically manages the identity lifecycle
 - Token-based authentication with Azure Active Directory
-- Enhanced security with no password management
+- Enhanced security with automatic credential rotation
 
 ### Initial Setup Required
 
-After deploying the infrastructure, you may need to grant the Web App's managed identity access to the database:
+After deploying the infrastructure, you **must** grant the Web App's managed identity access to the database:
 
 ```sql
 -- Connect to the SQL Database as admin
@@ -188,10 +189,8 @@ The application automatically:
 The template automatically configures these environment variables on the Web App:
 - `SQL_SERVER`: Fully qualified domain name of the SQL Server
 - `SQL_DATABASE`: Database name
-- `SQL_USER`: SQL admin username
-- `SQL_PASSWORD`: SQL admin password
 
-For production use with managed identity, the `SQL_USER` and `SQL_PASSWORD` are fallback credentials.
+**Note**: SQL_USER and SQL_PASSWORD are no longer configured as the application uses Managed Identity exclusively for enhanced security.
 
 ## Best Practices
 
@@ -200,9 +199,10 @@ For production use with managed identity, the `SQL_USER` and `SQL_PASSWORD` are 
 3. **Use Tags**: Add tags for better resource management and cost tracking
 4. **Separate Environments**: Use different resource groups for dev, staging, and production
 5. **Monitor Costs**: Free tier is limited; upgrade only when needed
-6. **Secure Passwords**: Use strong, randomly generated passwords for SQL admin accounts
-7. **Managed Identity**: Prefer managed identity over SQL authentication in production
+6. **Secure Passwords**: Use strong, randomly generated passwords for SQL admin accounts (used only for setup)
+7. **Managed Identity Only**: The application uses Azure Managed Identity exclusively - SQL authentication is disabled
 8. **Backup Database**: Enable automated backups for production databases
+9. **Grant Minimal Permissions**: Only grant necessary database roles to managed identities
 
 ## Learn More
 
