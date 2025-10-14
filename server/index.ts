@@ -13,8 +13,12 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the ui-dist directory
-const distPath = path.join(__dirname, "../ui-dist");
+// Serve static files from the dist directory
+// In development, files are in ui-dist/
+// In production (Azure deployment), files are in dist/
+const distPath = fs.existsSync(path.join(__dirname, "../dist"))
+  ? path.join(__dirname, "../dist")
+  : path.join(__dirname, "../ui-dist");
 app.use(express.static(distPath));
 
 // API Routes
