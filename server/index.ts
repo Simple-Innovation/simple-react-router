@@ -49,16 +49,18 @@ app.post("/api/submit", async (req, res) => {
     const formData = req.body;
     const { name, email } = formData;
     
-    if (name && email && dbInitialized) {
-      // Try to create user in database
-      const user = await createUser(name, email);
-      console.log("User created in database:", user);
-      res.json({ success: true, message: "User created successfully", user });
-    } else {
-      // Fallback if DB not available
-      console.log("Form submitted:", formData);
-      res.json({ success: true, message: "Form processed successfully" });
+    if (!name || !email) {
+      return res.status(400).json({ success: false, message: "Name and email are required" });
     }
+    
+    if (!dbInitialized) {
+      return res.status(503).json({ success: false, message: "Database not initialized" });
+    }
+    
+    // Create user in database
+    const user = await createUser(name, email);
+    console.log("User created in database:", user);
+    res.json({ success: true, message: "User created successfully", user });
   } catch (error) {
     console.error("Error processing form:", error);
     res.status(500).json({ success: false, message: "Error processing form" });
