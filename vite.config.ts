@@ -10,8 +10,8 @@ export default defineConfig({
       name: 'copy-web-config',
       closeBundle() {
         // Copy web.config to dist folder for Azure deployment
-        const src = resolve(__dirname, 'dev/web.config');
-        const dest = resolve(__dirname, 'dev/dist/web.config');
+        const src = resolve(__dirname, 'ui/web.config');
+        const dest = resolve(__dirname, 'ui/dist/web.config');
         try {
           copyFileSync(src, dest);
           console.log('web.config copied to dist');
@@ -21,7 +21,7 @@ export default defineConfig({
       },
     },
   ],
-  root: 'dev',
+  root: 'ui',
   server: {
     port: 3000,
   },

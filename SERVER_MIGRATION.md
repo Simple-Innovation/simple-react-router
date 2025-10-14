@@ -79,7 +79,7 @@ npm run build
 
 This runs:
 
-1. `vite build` → builds React app to `dev/dist/`
+1. `vite build` → builds React app to `ui/dist/`
 2. `tsc --project tsconfig.server.json` → compiles server to `server-dist/`
 
 ### Deployment Package Structure
@@ -98,7 +98,7 @@ deploy-package/
 
    - Installs dependencies
    - Runs tests
-   - Builds client (Vite → `dev/dist/`)
+   - Builds client (Vite → `ui/dist/`)
    - Builds server (TypeScript → `server-dist/`)
    - Creates deployment package
 
@@ -216,7 +216,7 @@ Set these in Azure App Service Configuration (if needed):
 
 ```bash
 # Clear build artifacts
-rm -rf server-dist dev/dist node_modules
+rm -rf server-dist ui/dist node_modules
 npm install
 npm run build
 ```
@@ -226,7 +226,7 @@ npm run build
 Check that:
 
 - `server-dist/index.js` exists after build
-- `dev/dist/index.html` exists after build
+- `ui/dist/index.html` exists after build
 - Port 8080 is not already in use
 
 ### Azure deployment fails
