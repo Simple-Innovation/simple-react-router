@@ -25,7 +25,6 @@ async function initDb() {
     }
   }
 }
-initDb();
 
 // Middleware
 app.use(express.json());
@@ -119,6 +118,9 @@ app.get("*", (req, res) => {
     res.status(404).send("Application not found. Please build the app first.");
   }
 });
+
+// Initialize database before starting server
+await initDb();
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
