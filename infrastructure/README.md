@@ -163,9 +163,23 @@ The Web App uses **Azure Managed Identity exclusively** to connect to the SQL Da
 - Token-based authentication with Azure Active Directory
 - Enhanced security with automatic credential rotation
 
-### Initial Setup Required
+### Initial Setup (Automated via GitHub Actions)
 
-After deploying the infrastructure, you **must** grant the Web App's managed identity access to the database:
+**When using GitHub Actions deployment**, managed identity access is **automatically configured** during deployment.
+
+**For manual deployments**, you can use the provided script to automate this step:
+
+```bash
+bash ./scripts/configure-managed-identity.sh \
+  <resource-group> \
+  <sql-server-name> \
+  <database-name> \
+  <web-app-name> \
+  <sql-admin-login> \
+  <sql-admin-password>
+```
+
+**Or manually grant permissions** via SQL:
 
 ```sql
 -- Connect to the SQL Database as admin
