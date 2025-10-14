@@ -13,8 +13,11 @@ const PORT = process.env.PORT || 8080;
 
 // Initialize database on startup
 let dbInitialized = false;
+let initializationAttempted = false;
+
 async function initDb() {
-  if (!dbInitialized) {
+  if (!dbInitialized && !initializationAttempted) {
+    initializationAttempted = true;
     try {
       await initializeDatabase();
       dbInitialized = true;
@@ -22,8 +25,20 @@ async function initDb() {
     } catch (error) {
       console.error("Database initialization failed:", error);
       // Continue running the app even if DB init fails
+      // Reset the flag after a delay to allow retries
+      setTimeout(() => {
+        initializationAttempted = false;
+      }, 30000); // Retry after 30 seconds
     }
   }
+}
+
+// Function to check and retry database initialization if needed
+async function ensureDbInitialized() {
+  if (!dbInitialized) {
+    await initDb();
+  }
+  return dbInitialized;
 }
 
 // Middleware
@@ -53,6 +68,9 @@ app.post("/api/submit", async (req, res) => {
       return res.status(400).json({ success: false, message: "Name and email are required" });
     }
     
+    // Try to initialize DB if not already done
+    await ensureDbInitialized();
+    
     if (!dbInitialized) {
       return res.status(503).json({ success: false, message: "Database not initialized" });
     }
@@ -70,6 +88,9 @@ app.post("/api/submit", async (req, res) => {
 // Get all users from database
 app.get("/api/users", async (req, res) => {
   try {
+    // Try to initialize DB if not already done
+    await ensureDbInitialized();
+    
     if (!dbInitialized) {
       return res.status(503).json({ error: "Database not initialized" });
     }
@@ -84,6 +105,9 @@ app.get("/api/users", async (req, res) => {
 // Get a specific user by ID
 app.get("/api/users/:id", async (req, res) => {
   try {
+    // Try to initialize DB if not already done
+    await ensureDbInitialized();
+    
     if (!dbInitialized) {
       return res.status(503).json({ error: "Database not initialized" });
     }
