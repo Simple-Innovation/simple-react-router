@@ -188,6 +188,13 @@ Example (non-interactive):
 
      - Value: The entire JSON output from step 1
 
+   - `SQL_ADMIN_PASSWORD` (secret)
+
+     - Value: A secure password for the SQL Server administrator account
+     - Requirements: Minimum 8 characters, must contain uppercase letters, lowercase letters, numbers, and special characters
+     - Example: `MyS3cure#Pass123!`
+     - Note: This password is only used for initial SQL Server setup and emergency access. The application uses Azure Managed Identity for database authentication.
+
    - `AZURE_SUBSCRIPTION_ID` (repository Variable)
 
      - Value: Your Azure subscription ID (e.g., `12345678-1234-1234-1234-123456789abc`)
