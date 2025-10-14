@@ -31,7 +31,7 @@ env:
   # If the variable is not set, fall back to a sensible default to reduce naming collisions.
   # You can set the repository variable in the repo's Settings > Variables > Actions > New repository variable.
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'simple-react-router-web' }}
-  AZURE_WEBAPP_PACKAGE_PATH: "dev/dist" # set this to the path to your web app project, defaults to the repository root
+  AZURE_WEBAPP_PACKAGE_PATH: "ui-dist" # set this to the path to your web app project, defaults to the repository root
   NODE_VERSION: "22.x" # set this to the node version to use
   # Read the Azure region from a GitHub repository variable named `AZURE_LOCATION`.
   # If the variable is not set, fall back to 'uksouth'.
@@ -256,7 +256,7 @@ jobs:
           mkdir -p deploy-package
 
           # Copy built client files to dist folder
-          cp -r dev/dist deploy-package/dist
+          cp -r ui-dist deploy-package/dist
 
           # Copy built server files
           cp -r server-dist deploy-package/server-dist
@@ -312,12 +312,12 @@ jobs:
           # The build artifact is uploaded as the 'node-app' artifact. Downloaded by
           # actions/download-artifact it will be available under ./node-app. The
           # actual web app package (index.html, assets) lives in the dist folder
-          # configured by AZURE_WEBAPP_PACKAGE_PATH (default: dev/dist). Point the
+          # configured by AZURE_WEBAPP_PACKAGE_PATH (default: ui-dist). Point the
           # deploy action at that folder so index.html is deployed to the site root.
           # actions/upload-artifact uploads the CONTENTS of the folder you point at
-          # (dev/dist) into the artifact root. When actions/download-artifact
+          # (ui-dist) into the artifact root. When actions/download-artifact
           # extracts it to ./node-app the built site files are at ./node-app/, not
-          # ./node-app/dev/dist. Point the deploy action at the artifact root.
+          # ./node-app/ui-dist. Point the deploy action at the artifact root.
           package: ./node-app
 
       - name: Azure Logout

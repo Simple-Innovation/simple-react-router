@@ -15,7 +15,7 @@ This Express server provides:
 server/
   index.ts          # Main server entry point
 server-dist/        # Compiled server code (generated)
-dev/dist/          # Built React client app (generated)
+ui-dist/          # Built React client app (generated)
 ```
 
 ## Development
@@ -44,7 +44,7 @@ npm run build
 
 This will:
 
-1. Build the React client app with Vite → `dev/dist/`
+1. Build the React client app with Vite → `ui-dist/`
 2. Compile the TypeScript server → `server-dist/`
 
 ## Production
@@ -57,7 +57,7 @@ npm start
 
 The server will:
 
-- Serve the built React app from `dev/dist/`
+- Serve the built React app from `ui-dist/`
 - Handle API routes at `/api/*`
 - Fallback to SPA routing for all other routes
 

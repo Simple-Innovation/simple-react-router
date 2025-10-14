@@ -207,7 +207,7 @@ Note: this workflow requires `AZURE_RESOURCE_GROUP_NAME` to be a repository Vari
    env:
      # NOTE: The workflow will default `AZURE_WEBAPP_NAME` to 'simple-react-router-web' if not provided.
      AZURE_WEBAPP_NAME: simple-react-router-web
-     AZURE_WEBAPP_PACKAGE_PATH: "dev/dist"
+     AZURE_WEBAPP_PACKAGE_PATH: "ui-dist"
      NODE_VERSION: "22.x"
      AZURE_LOCATION: "eastus" # Azure region
      APP_SERVICE_PLAN_SKU: "F1" # F1=Free, B1=Basic, S1=Standard
@@ -280,7 +280,7 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 
 - **`.github/workflows/azure-webapps-deploy.yml`**: GitHub Actions workflow definition
 - **`infrastructure/main.bicep`**: Bicep template for Azure infrastructure (App Service Plan and Web App)
-- **`dev/web.config`**: IIS configuration for Azure App Service (handles SPA routing)
+- **`ui/web.config`**: IIS configuration for Azure App Service (handles SPA routing)
 - **`vite.config.ts`**: Vite configuration that includes plugin to copy web.config to build output
 
 ## Troubleshooting
@@ -330,7 +330,7 @@ To test the production build locally:
 npm run build:demo
 
 # Serve the built files (using any static server)
-npx serve dev/dist
+npx serve ui-dist
 ```
 
 ## Customization
