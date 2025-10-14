@@ -277,6 +277,71 @@ jobs:
           echo "::error title=Health Check Failed::Health endpoint at ${HEALTH_URL} did not respond with 200 OK after ${MAX_RETRIES} attempts"
           exit 1
 
+      - name: Test database initialization
+        run: |
+          set -euo pipefail
+          WEBAPP_URL="${{ needs.deploy.outputs.webapp-url }}"
+          USERS_URL="${WEBAPP_URL}/api/users"
+          
+          echo "Testing database initialization at: ${USERS_URL}"
+          echo "Waiting 10 seconds for database to be ready..."
+          sleep 10
+          
+          # Try up to 5 times with 10 second intervals
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT + 1)) of ${MAX_RETRIES}..."
+            
+            # Capture both response body and HTTP status code
+            RESPONSE=$(curl -s -w "\n%{http_code}" "${USERS_URL}")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+            
+            echo "HTTP Status: ${HTTP_CODE}"
+            echo "Response Body:"
+            echo "${BODY}"
+            
+            # Check if we got a successful response
+            if [ "$HTTP_CODE" = "200" ]; then
+              # Verify the response is valid JSON and contains data
+              if echo "$BODY" | jq empty 2>/dev/null; then
+                USER_COUNT=$(echo "$BODY" | jq '. | length' 2>/dev/null || echo "0")
+                echo "✓ Database is initialized with ${USER_COUNT} users"
+                
+                if [ "$USER_COUNT" -gt 0 ]; then
+                  echo "✓ Database contains sample data"
+                  exit 0
+                else
+                  echo "⚠ Warning: Database is initialized but contains no users"
+                  exit 0
+                fi
+              else
+                echo "✗ Response is not valid JSON"
+              fi
+            elif [ "$HTTP_CODE" = "503" ]; then
+              ERROR_MSG=$(echo "$BODY" | jq -r '.error' 2>/dev/null || echo "$BODY")
+              if [[ "$ERROR_MSG" == *"Database not initialized"* ]]; then
+                echo "Database not yet initialized, will retry..."
+              else
+                echo "Service unavailable: $ERROR_MSG"
+              fi
+            else
+              echo "Unexpected HTTP status code: ${HTTP_CODE}"
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Database not ready yet, waiting 10 seconds..."
+              sleep 10
+            fi
+          done
+          
+          echo "::error title=Database Initialization Failed::Database at ${USERS_URL} was not initialized after ${MAX_RETRIES} attempts"
+          echo "::error::The /api/users endpoint should return a 200 status with user data, but it did not."
+          exit 1
+
   build:
     runs-on: ubuntu-latest
     needs: infrastructure
