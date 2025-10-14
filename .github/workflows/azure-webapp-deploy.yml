@@ -9,6 +9,7 @@
 #
 # 2. Create the following secrets and repository variables in your repository (Settings > Secrets and variables > Actions):
 #    - AZURE_CREDENTIALS (secret): The entire JSON output from step 1
+#    - SQL_ADMIN_PASSWORD (secret): A secure password for SQL Server admin (min 8 chars, uppercase, lowercase, numbers, symbols)
 #    - AZURE_SUBSCRIPTION_ID (repository Variable): Your Azure subscription ID
 #    - AZURE_RESOURCE_GROUP_NAME (repository Variable): Name of the resource group to create/use (e.g., 'simple-react-router-rg')
 #
@@ -152,6 +153,16 @@ jobs:
             echo "::notice title=Subscription OK::AZURE_SUBSCRIPTION_ID=present"
           fi
 
+      - name: Validate SQL Admin Password
+        run: |
+          if [[ -z "${{ secrets.SQL_ADMIN_PASSWORD }}" ]]; then
+            echo "::error title=Missing SQL Admin Password::Secret SQL_ADMIN_PASSWORD is not set. Create it under Settings → Secrets and variables → Actions → New repository secret."
+            echo "::error::The password must be at least 8 characters and contain uppercase, lowercase, numbers, and symbols."
+            exit 1
+          else
+            echo "::notice title=SQL Password OK::SQL_ADMIN_PASSWORD secret is configured"
+          fi
+
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -178,6 +189,7 @@ jobs:
             location=${{ env.AZURE_LOCATION }}
             appServicePlanSku=${{ env.APP_SERVICE_PLAN_SKU }}
             nodeVersion=22-lts
+            sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
           failOnStdErr: false
 
       - name: Azure Logout
