@@ -31,16 +31,8 @@ initDb();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the dist directory
-// In development, files are in ui-dist/
-// In production (Azure deployment), files are in dist/
-const distPath = fs.existsSync(path.join(__dirname, "../dist"))
-  ? path.join(__dirname, "../dist")
-  : path.join(__dirname, "../ui-dist");
-app.use(express.static(distPath));
-
-// API Routes
-// Add your API endpoints here
+// API Routes - Must be defined BEFORE static file middleware
+// to ensure API requests are handled correctly
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
@@ -107,6 +99,15 @@ app.get("/api/users/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch user" });
   }
 });
+
+// Serve static files from the dist directory
+// In development, files are in ui-dist/
+// In production (Azure deployment), files are in dist/
+// This must be AFTER API routes to prevent conflicts
+const distPath = fs.existsSync(path.join(__dirname, "../dist"))
+  ? path.join(__dirname, "../dist")
+  : path.join(__dirname, "../ui-dist");
+app.use(express.static(distPath));
 
 // SPA fallback - serve index.html for all other routes
 // This must be last to allow client-side routing to work
