@@ -207,7 +207,7 @@ Note: this workflow requires `AZURE_RESOURCE_GROUP_NAME` to be a repository Vari
    env:
      # NOTE: The workflow will default `AZURE_WEBAPP_NAME` to 'simple-react-router-web' if not provided.
      AZURE_WEBAPP_NAME: simple-react-router-web
-     AZURE_WEBAPP_PACKAGE_PATH: "ui/dist"
+     AZURE_WEBAPP_PACKAGE_PATH: "ui-dist"
      NODE_VERSION: "22.x"
      AZURE_LOCATION: "eastus" # Azure region
      APP_SERVICE_PLAN_SKU: "F1" # F1=Free, B1=Basic, S1=Standard
@@ -330,7 +330,7 @@ To test the production build locally:
 npm run build:demo
 
 # Serve the built files (using any static server)
-npx serve ui/dist
+npx serve ui-dist
 ```
 
 ## Customization
