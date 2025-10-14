@@ -26,6 +26,7 @@ on:
     branches:
       - main
   workflow_dispatch:
+    # Allows manual deployment from any branch
 
 env:
   # Read the web app name from a GitHub repository variable named `AZURE_WEBAPP_NAME`.
