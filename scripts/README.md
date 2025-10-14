@@ -29,6 +29,52 @@ Creates an Azure service principal for GitHub Actions deployment.
   --output my-creds.json
 ```
 
+### initialize-database.sh
+
+Initializes the database schema by creating the Users table and inserting sample data if needed.
+
+**Usage:**
+```bash
+./scripts/initialize-database.sh \
+  <resource-group> \
+  <sql-server-name> \
+  <database-name> \
+  <sql-admin-login> \
+  <sql-admin-password>
+```
+
+**Parameters:**
+- `resource-group`: Azure resource group name
+- `sql-server-name`: SQL Server name (without .database.windows.net)
+- `database-name`: SQL Database name
+- `sql-admin-login`: SQL Server administrator login
+- `sql-admin-password`: SQL Server administrator password
+
+**Example:**
+```bash
+./scripts/initialize-database.sh \
+  simple-react-router-rg \
+  simple-react-router-web-sql \
+  UsersDB \
+  sqladmin \
+  'YourSecurePassword123!'
+```
+
+**What it does:**
+- Creates the `Users` table if it doesn't exist
+- Inserts sample user data if the table is empty
+- Uses idempotent SQL commands (safe to run multiple times)
+
+**When to use:**
+- **Automatic**: This script runs automatically during GitHub Actions deployment (after managed identity configuration)
+- **Manual deployments**: Run manually after deploying infrastructure with Bicep
+- **Database reset**: Use to recreate the schema if needed
+
+**Requirements:**
+- `sqlcmd` utility (automatically installed by the script if not present)
+- `sudo` access for installing `sqlcmd` (required in CI/CD environments)
+- SQL Server administrator credentials
+
 ### configure-managed-identity.sh
 
 Automatically configures managed identity access to Azure SQL Database by granting the Web App's system-assigned identity the necessary database permissions.

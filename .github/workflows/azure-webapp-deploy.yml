@@ -204,6 +204,16 @@ jobs:
             "sqladmin" \
             "${{ secrets.SQL_ADMIN_PASSWORD }}"
 
+      - name: Initialize Database Schema
+        run: |
+          echo "Initializing database schema and sample data..."
+          bash ./scripts/initialize-database.sh \
+            "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+            "${{ steps.deploy-infra.outputs.sqlServerName }}" \
+            "${{ steps.deploy-infra.outputs.sqlDatabaseName }}" \
+            "sqladmin" \
+            "${{ secrets.SQL_ADMIN_PASSWORD }}"
+
       - name: Azure Logout
         if: always()
         run: az logout
