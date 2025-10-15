@@ -172,20 +172,25 @@ fi
 # -Q: query to execute
 # -b: abort batch on error
 echo "Executing SQL script..."
-OUTPUT=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
+echo ""
+
+# Use set +e temporarily to prevent script from exiting on sqlcmd error
+# so we can capture the output and provide better error messages
+set +e
+sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
     -U "$SQL_ADMIN_LOGIN" \
     -P "$SQL_ADMIN_PASSWORD" \
     -C \
     -b \
-    -Q "$SQL_SCRIPT" 2>&1)
+    -Q "$SQL_SCRIPT"
 
 SQL_EXIT_CODE=$?
+set -e
 
-echo "$OUTPUT"
+echo ""
 
 if [ $SQL_EXIT_CODE -ne 0 ]; then
-    echo ""
     echo "============================================"
     echo "✗ ERROR: Failed to configure managed identity access"
     echo "============================================"
@@ -195,6 +200,8 @@ if [ $SQL_EXIT_CODE -ne 0 ]; then
     echo "  1. Azure AD administrator is not configured on the SQL Server"
     echo "  2. Azure AD configuration has not fully propagated (wait longer)"
     echo "  3. SQL Server cannot reach Azure AD"
+    echo ""
+    echo "The error output above should provide more details about what went wrong."
     echo ""
     exit 1
 fi
