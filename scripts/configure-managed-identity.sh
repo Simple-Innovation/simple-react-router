@@ -170,84 +170,76 @@ ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.n
 if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == *"ERROR"* || "$ACCESS_TOKEN" == *"WARNING"* ]]; then
     echo "ERROR: Failed to acquire Azure AD access token"
     echo "Make sure you are logged in with 'az login' and have access to the SQL Server"
-    echo "Token value received: ${ACCESS_TOKEN:0:50}..."
     exit 1
 fi
 
 echo "Successfully acquired access token"
-echo "Token length: ${#ACCESS_TOKEN} characters"
-echo ""
-echo "DEBUG: First 100 characters of token: ${ACCESS_TOKEN:0:100}"
-echo "DEBUG: Last 50 characters of token: ${ACCESS_TOKEN: -50}"
-echo ""
 
-# Execute SQL commands using sqlcmd with Azure AD authentication
-# For Azure AD token authentication with sqlcmd, we need to use the access token
-# as the password parameter. Since tokens are >128 chars and -P has a limit,
-# we write the SQL commands with the connection using a here-document approach
-# or use the ODBC connection string with AccessToken parameter
-echo "Executing SQL script with Azure AD authentication..."
+# Execute SQL commands using Python with pyodbc
+# This is the most reliable method for using Azure AD access tokens with SQL Server
+echo "Executing SQL script with Azure AD authentication using Python..."
 echo ""
 
-# Create a temporary SQL file
-TEMP_SQL_FILE=$(mktemp)
-echo "$SQL_SCRIPT" > "$TEMP_SQL_FILE"
-
-# Use set +e temporarily to prevent script from exiting on sqlcmd error
-# so we can capture the output and provide better error messages
+# Use set +e temporarily to prevent script from exiting on error
 set +e
 
-# For sqlcmd with access tokens, we need to use the -G flag for Azure AD
-# and provide the token via SQLCMDPASSWORD. However, sqlcmd -G with SQLCMDPASSWORD
-# expects a user password, not an access token.
-# 
-# The correct approach for access tokens is to use the -P parameter directly
-# but since it has a 128 char limit, we need to use a workaround:
-# Write a temp connection script or use osql/sqlcmd with token in connection string
-#
-# Alternative: Use the access token in a connection string format
-# But sqlcmd doesn't support AccessToken in connection strings directly
-#
-# The working solution: Use sqlcmd without -G, and pass token as password with special format
-# Actually, for access tokens, we should use: -P with the token, but escape properly
-# However, the real issue is that -G + SQLCMDPASSWORD expects user/pass auth
-#
-# Let's try using the admin SQL authentication instead and run the command via that
-# Wait - we already know SQL auth doesn't work for creating AD users
-#
-# The real solution: sqlcmd DOES support access tokens but requires proper format
-# When using -G (Azure AD auth), you DON'T use -P or SQLCMDPASSWORD
-# Instead, you use -U with a special format or let it use integrated auth
-#
-# For access tokens in sqlcmd with msodbcsql18:
-# You need to use the ODBC connection string format with AccessToken parameter
-# But sqlcmd doesn't expose this directly in command line
-#
-# Best approach: Use Azure CLI's built-in SQL execute command... but that doesn't exist
-# Or use Python/PowerShell with proper SQL libraries
-#
-# Practical solution: Use the SQL admin credentials to execute the command
-# But we already tried that and it failed because only AD accounts can create AD users
-#
-# ACTUAL SOLUTION: The token needs to be passed differently for ODBC 18
-# We need to create a connection that includes the token in the ODBC format
-# This requires using a connection file or environment variable that ODBC driver reads
-#
-# Let me check if there's an ODBC environment variable for access tokens...
-# After research: MSODBCSQL supports AccessToken in connection string but not via sqlcmd CLI
-#
-# Final approach: Since we're in GitHub Actions with az CLI already authenticated,
-# we can use the az CLI extension for SQL or use a Python script
-# But the simplest is to use sqlcmd with proper authentication
+# Create Python script to execute SQL with access token
+python3 << PYTHON_SCRIPT
+import struct
+import sys
 
-# For now, let's try using sqlcmd with -G and authentication without password
-# The -G flag should use the current Azure CLI authentication context
-sqlcmd -S "${SQL_SERVER}.database.windows.net" \
-    -d "$DATABASE_NAME" \
-    -G \
-    -C \
-    -b \
-    -i "$TEMP_SQL_FILE"
+try:
+    import pyodbc
+except ImportError:
+    print("Installing pyodbc...")
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyodbc"])
+    import pyodbc
+
+# Access token from environment
+access_token = """$ACCESS_TOKEN"""
+
+# Convert token to bytes for ODBC
+token_bytes = access_token.encode("utf-16-le")
+token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+
+# Connection string with access token
+conn_str = (
+    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+    f"SERVER=${SQL_SERVER}.database.windows.net;"
+    f"DATABASE=$DATABASE_NAME;"
+    f"Encrypt=yes;"
+    f"TrustServerCertificate=no;"
+)
+
+try:
+    # Connect using access token
+    conn = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
+    cursor = conn.cursor()
+    
+    # Execute SQL script
+    sql_script = """$SQL_SCRIPT"""
+    
+    # Execute each statement (split by GO if present)
+    statements = [s.strip() for s in sql_script.split('GO') if s.strip()]
+    
+    for statement in statements:
+        try:
+            cursor.execute(statement)
+            conn.commit()
+        except pyodbc.Error as e:
+            print(f"Error executing statement: {e}")
+            sys.exit(1)
+    
+    cursor.close()
+    conn.close()
+    print("✓ SUCCESS: SQL script executed successfully")
+    sys.exit(0)
+    
+except Exception as e:
+    print(f"ERROR: Failed to execute SQL script: {e}")
+    sys.exit(1)
+PYTHON_SCRIPT
 
 SQL_EXIT_CODE=$?
 
@@ -278,21 +270,50 @@ fi
 echo ""
 echo "Verifying user creation..."
 
-# Use environment variable for token (same as before)
-export SQLCMDPASSWORD="$ACCESS_TOKEN"
+# Use Python/pyodbc for verification as well (consistent with main execution)
+USER_CHECK=$(python3 << VERIFY_SCRIPT
+import struct
+import sys
 
-USER_CHECK=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
-    -d "$DATABASE_NAME" \
-    -G \
-    -C \
-    -h -1 \
-    -Q "SELECT COUNT(*) FROM sys.database_principals WHERE name = N'${WEB_APP_NAME}' AND type IN ('E', 'X')" 2>&1 | tr -d '[:space:]')
+try:
+    import pyodbc
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyodbc"])
+    import pyodbc
 
-# Clear the token from environment
-unset SQLCMDPASSWORD
+access_token = """$ACCESS_TOKEN"""
+token_bytes = access_token.encode("utf-16-le")
+token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
 
-if [ "$USER_CHECK" = "1" ]; then
-    echo "✓ User verified in database"
+conn_str = (
+    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+    f"SERVER=${SQL_SERVER}.database.windows.net;"
+    f"DATABASE=$DATABASE_NAME;"
+    f"Encrypt=yes;"
+    f"TrustServerCertificate=no;"
+)
+
+try:
+    conn = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sys.database_principals WHERE type IN ('E', 'X') AND name = '$WEB_APP_NAME'")
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if result:
+        print(result[0])
+    sys.exit(0)
+except Exception as e:
+    print(f"", file=sys.stderr)
+    sys.exit(1)
+VERIFY_SCRIPT
+)
+
+VERIFY_EXIT_CODE=$?
+
+if [ $VERIFY_EXIT_CODE -eq 0 ] && [ -n "$USER_CHECK" ]; then
+    echo "✓ User verified in database: $USER_CHECK"
 else
     echo "✗ WARNING: User not found in database after creation attempt"
     echo "   This indicates the CREATE USER command may have failed silently"
