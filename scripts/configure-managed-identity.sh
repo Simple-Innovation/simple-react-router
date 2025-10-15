@@ -67,17 +67,40 @@ fi
 # Note: For system-assigned managed identities, the user name should be the app name
 # But we verify it matches the principal ID from Azure
 SQL_SCRIPT="
+SET NOCOUNT ON;
 DECLARE @principalId NVARCHAR(128) = N'${PRINCIPAL_ID}';
 DECLARE @webAppName NVARCHAR(128) = N'${WEB_APP_NAME}';
+DECLARE @errorMessage NVARCHAR(4000);
 
 -- Check if user exists
 IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = @webAppName)
 BEGIN
-    -- Create user for managed identity
-    DECLARE @sql NVARCHAR(MAX) = N'CREATE USER [' + @webAppName + N'] FROM EXTERNAL PROVIDER';
-    EXEC sp_executesql @sql;
-    PRINT 'Created user for managed identity: ' + @webAppName;
-    PRINT 'Principal ID: ' + @principalId;
+    BEGIN TRY
+        -- Create user for managed identity
+        DECLARE @sql NVARCHAR(MAX) = N'CREATE USER [' + @webAppName + N'] FROM EXTERNAL PROVIDER';
+        EXEC sp_executesql @sql;
+        
+        -- Verify user was created
+        IF EXISTS (SELECT * FROM sys.database_principals WHERE name = @webAppName)
+        BEGIN
+            PRINT 'SUCCESS: Created user for managed identity: ' + @webAppName;
+            PRINT 'Principal ID: ' + @principalId;
+        END
+        ELSE
+        BEGIN
+            PRINT 'ERROR: User creation appeared to succeed but user not found in database';
+            RAISERROR('Failed to verify user creation', 16, 1);
+        END
+    END TRY
+    BEGIN CATCH
+        SET @errorMessage = ERROR_MESSAGE();
+        PRINT 'ERROR creating user: ' + @errorMessage;
+        PRINT 'This usually means:';
+        PRINT '  1. Azure AD admin is not configured on SQL Server';
+        PRINT '  2. Azure AD admin configuration has not propagated yet';
+        PRINT '  3. The managed identity does not exist in Azure AD';
+        RAISERROR(@errorMessage, 16, 1);
+    END CATCH
 END
 ELSE
 BEGIN
@@ -147,12 +170,53 @@ fi
 # -P: password
 # -C: trust server certificate (required for Azure SQL with TLS 1.2+)
 # -Q: query to execute
-sqlcmd -S "${SQL_SERVER}.database.windows.net" \
+# -b: abort batch on error
+echo "Executing SQL script..."
+OUTPUT=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
     -U "$SQL_ADMIN_LOGIN" \
     -P "$SQL_ADMIN_PASSWORD" \
     -C \
-    -Q "$SQL_SCRIPT"
+    -b \
+    -Q "$SQL_SCRIPT" 2>&1)
+
+SQL_EXIT_CODE=$?
+
+echo "$OUTPUT"
+
+if [ $SQL_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "============================================"
+    echo "✗ ERROR: Failed to configure managed identity access"
+    echo "============================================"
+    echo "SQL command failed with exit code: $SQL_EXIT_CODE"
+    echo ""
+    echo "Common causes:"
+    echo "  1. Azure AD administrator is not configured on the SQL Server"
+    echo "  2. Azure AD configuration has not fully propagated (wait longer)"
+    echo "  3. SQL Server cannot reach Azure AD"
+    echo ""
+    exit 1
+fi
+
+# Verify the user was created
+echo ""
+echo "Verifying user creation..."
+USER_CHECK=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
+    -d "$DATABASE_NAME" \
+    -U "$SQL_ADMIN_LOGIN" \
+    -P "$SQL_ADMIN_PASSWORD" \
+    -C \
+    -h -1 \
+    -Q "SELECT COUNT(*) FROM sys.database_principals WHERE name = N'${WEB_APP_NAME}' AND type IN ('E', 'X')" 2>&1 | tr -d '[:space:]')
+
+if [ "$USER_CHECK" = "1" ]; then
+    echo "✓ User verified in database"
+else
+    echo "✗ WARNING: User not found in database after creation attempt"
+    echo "   This indicates the CREATE USER command may have failed silently"
+    exit 1
+fi
 
 echo ""
 echo "============================================"
