@@ -163,15 +163,28 @@ if ! command -v sqlcmd &> /dev/null; then
     echo "sqlcmd installed successfully"
 fi
 
-# Execute SQL commands using sqlcmd
+# Get Azure AD access token for SQL Database
+echo "Acquiring Azure AD access token for SQL Database authentication..."
+ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken --output tsv)
+
+if [[ -z "$ACCESS_TOKEN" ]]; then
+    echo "ERROR: Failed to acquire Azure AD access token"
+    echo "Make sure you are logged in with 'az login' and have access to the SQL Server"
+    exit 1
+fi
+
+echo "Successfully acquired access token"
+echo ""
+
+# Execute SQL commands using sqlcmd with Azure AD authentication
 # -S: server name
 # -d: database name
-# -U: username
-# -P: password
+# -G: Use Azure Active Directory authentication
+# -P: Access token (when used with -G)
 # -C: trust server certificate (required for Azure SQL with TLS 1.2+)
 # -Q: query to execute
 # -b: abort batch on error
-echo "Executing SQL script..."
+echo "Executing SQL script with Azure AD authentication..."
 echo ""
 
 # Use set +e temporarily to prevent script from exiting on sqlcmd error
@@ -179,8 +192,8 @@ echo ""
 set +e
 sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
-    -U "$SQL_ADMIN_LOGIN" \
-    -P "$SQL_ADMIN_PASSWORD" \
+    -G \
+    -P "$ACCESS_TOKEN" \
     -C \
     -b \
     -Q "$SQL_SCRIPT"
@@ -211,8 +224,8 @@ echo ""
 echo "Verifying user creation..."
 USER_CHECK=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
-    -U "$SQL_ADMIN_LOGIN" \
-    -P "$SQL_ADMIN_PASSWORD" \
+    -G \
+    -P "$ACCESS_TOKEN" \
     -C \
     -h -1 \
     -Q "SELECT COUNT(*) FROM sys.database_principals WHERE name = N'${WEB_APP_NAME}' AND type IN ('E', 'X')" 2>&1 | tr -d '[:space:]')
