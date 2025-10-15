@@ -165,15 +165,17 @@ fi
 
 # Get Azure AD access token for SQL Database
 echo "Acquiring Azure AD access token for SQL Database authentication..."
-ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken --output tsv)
+ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken --output tsv 2>/dev/null)
 
-if [[ -z "$ACCESS_TOKEN" ]]; then
+if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == *"ERROR"* || "$ACCESS_TOKEN" == *"WARNING"* ]]; then
     echo "ERROR: Failed to acquire Azure AD access token"
     echo "Make sure you are logged in with 'az login' and have access to the SQL Server"
+    echo "Token value received: ${ACCESS_TOKEN:0:50}..."
     exit 1
 fi
 
 echo "Successfully acquired access token"
+echo "Token length: ${#ACCESS_TOKEN} characters"
 echo ""
 
 # Execute SQL commands using sqlcmd with Azure AD authentication
@@ -237,13 +239,19 @@ fi
 # Verify the user was created
 echo ""
 echo "Verifying user creation..."
+
+# Use environment variable for token (same as before)
+export SQLCMDPASSWORD="$ACCESS_TOKEN"
+
 USER_CHECK=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
     -G \
-    -P "$ACCESS_TOKEN" \
     -C \
     -h -1 \
     -Q "SELECT COUNT(*) FROM sys.database_principals WHERE name = N'${WEB_APP_NAME}' AND type IN ('E', 'X')" 2>&1 | tr -d '[:space:]')
+
+# Clear the token from environment
+unset SQLCMDPASSWORD
 
 if [ "$USER_CHECK" = "1" ]; then
     echo "✓ User verified in database"
