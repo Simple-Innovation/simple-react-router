@@ -177,29 +177,44 @@ echo "Successfully acquired access token"
 echo ""
 
 # Execute SQL commands using sqlcmd with Azure AD authentication
+# For Azure AD token authentication, we use environment variable
+# because the token is too long for the -P parameter (max 128 chars)
 # -S: server name
 # -d: database name
 # -G: Use Azure Active Directory authentication
-# -P: Access token (when used with -G)
 # -C: trust server certificate (required for Azure SQL with TLS 1.2+)
-# -Q: query to execute
 # -b: abort batch on error
 echo "Executing SQL script with Azure AD authentication..."
 echo ""
 
+# Create a temporary SQL file
+TEMP_SQL_FILE=$(mktemp)
+echo "$SQL_SCRIPT" > "$TEMP_SQL_FILE"
+
 # Use set +e temporarily to prevent script from exiting on sqlcmd error
 # so we can capture the output and provide better error messages
 set +e
+
+# Set the access token as environment variable for sqlcmd
+# When using -G with Azure AD, sqlcmd checks SQLCMDPASSWORD for the access token
+export SQLCMDPASSWORD="$ACCESS_TOKEN"
+
 sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
     -G \
-    -P "$ACCESS_TOKEN" \
     -C \
     -b \
-    -Q "$SQL_SCRIPT"
+    -i "$TEMP_SQL_FILE"
 
 SQL_EXIT_CODE=$?
+
+# Clear the token from environment
+unset SQLCMDPASSWORD
+
 set -e
+
+# Clean up temp file
+rm -f "$TEMP_SQL_FILE"
 
 echo ""
 
