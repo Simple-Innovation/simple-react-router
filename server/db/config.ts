@@ -21,6 +21,22 @@ export async function getDbConfig(): Promise<sql.config> {
     const tokenResponse = await credential.getToken("https://database.windows.net/.default");
     console.log("Successfully acquired Azure AD token for database access");
     
+    // Decode token to check identity (for debugging)
+    try {
+      const tokenParts = tokenResponse.token.split('.');
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+        console.log("Token identity info:", {
+          oid: payload.oid || 'not present',
+          appid: payload.appid || 'not present', 
+          upn: payload.upn || 'not present',
+          unique_name: payload.unique_name || 'not present'
+        });
+      }
+    } catch (decodeError) {
+      console.log("Could not decode token for debugging (this is not a critical error)");
+    }
+    
     const config: sql.config = {
       server,
       database,

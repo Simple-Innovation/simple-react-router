@@ -36,16 +36,52 @@ echo "Database: $DATABASE_NAME"
 echo "Web App: $WEB_APP_NAME"
 echo "============================================"
 
+# Get the managed identity's Object ID
+echo "Retrieving managed identity details..."
+PRINCIPAL_ID=$(az webapp identity show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$WEB_APP_NAME" \
+    --query principalId \
+    --output tsv 2>/dev/null || echo "")
+
+if [[ -z "$PRINCIPAL_ID" ]]; then
+    echo "ERROR: Could not retrieve managed identity principal ID for Web App: $WEB_APP_NAME"
+    echo "Make sure the Web App has a system-assigned managed identity enabled."
+    exit 1
+fi
+
+echo "Managed Identity Principal ID: $PRINCIPAL_ID"
+
+# Get the managed identity's client ID (Application ID)
+CLIENT_ID=$(az webapp identity show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$WEB_APP_NAME" \
+    --query principalId \
+    --output tsv | xargs -I {} az ad sp show --id {} --query appId --output tsv 2>/dev/null || echo "")
+
+if [[ -n "$CLIENT_ID" ]]; then
+    echo "Managed Identity Client ID: $CLIENT_ID"
+fi
+
 # Create SQL script to grant permissions
+# Note: For system-assigned managed identities, the user name should be the app name
+# But we verify it matches the principal ID from Azure
 SQL_SCRIPT="
-IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = N'${WEB_APP_NAME}')
+DECLARE @principalId NVARCHAR(128) = N'${PRINCIPAL_ID}';
+DECLARE @webAppName NVARCHAR(128) = N'${WEB_APP_NAME}';
+
+-- Check if user exists
+IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = @webAppName)
 BEGIN
-    CREATE USER [${WEB_APP_NAME}] FROM EXTERNAL PROVIDER;
-    PRINT 'Created user for managed identity: ${WEB_APP_NAME}';
+    -- Create user for managed identity
+    DECLARE @sql NVARCHAR(MAX) = N'CREATE USER [' + @webAppName + N'] FROM EXTERNAL PROVIDER';
+    EXEC sp_executesql @sql;
+    PRINT 'Created user for managed identity: ' + @webAppName;
+    PRINT 'Principal ID: ' + @principalId;
 END
 ELSE
 BEGIN
-    PRINT 'User already exists for managed identity: ${WEB_APP_NAME}';
+    PRINT 'User already exists for managed identity: ' + @webAppName;
 END
 
 IF IS_ROLEMEMBER('db_datareader', '${WEB_APP_NAME}') = 0
