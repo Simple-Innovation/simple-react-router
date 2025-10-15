@@ -177,6 +177,9 @@ fi
 echo "Successfully acquired access token"
 echo "Token length: ${#ACCESS_TOKEN} characters"
 echo ""
+echo "DEBUG: First 100 characters of token: ${ACCESS_TOKEN:0:100}"
+echo "DEBUG: Last 50 characters of token: ${ACCESS_TOKEN: -50}"
+echo ""
 
 # Execute SQL commands using sqlcmd with Azure AD authentication
 # For Azure AD token authentication, we use environment variable
@@ -200,6 +203,11 @@ set +e
 # Set the access token as environment variable for sqlcmd
 # When using -G with Azure AD, sqlcmd checks SQLCMDPASSWORD for the access token
 export SQLCMDPASSWORD="$ACCESS_TOKEN"
+
+echo "DEBUG: SQLCMDPASSWORD environment variable length: ${#SQLCMDPASSWORD} characters"
+echo "DEBUG: First 100 characters of SQLCMDPASSWORD: ${SQLCMDPASSWORD:0:100}"
+echo "DEBUG: Last 50 characters of SQLCMDPASSWORD: ${SQLCMDPASSWORD: -50}"
+echo ""
 
 sqlcmd -S "${SQL_SERVER}.database.windows.net" \
     -d "$DATABASE_NAME" \
