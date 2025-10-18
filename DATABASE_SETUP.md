@@ -83,7 +83,7 @@ Replace `[your-web-app-name]` with the actual name of your Web App (e.g., `simpl
 
 ### Step 2: Grant Managed Identity Access
 
-**Option A: Using the automated script (Recommended)**
+#### Option A: Using the automated script (Recommended)
 
 Download or clone the repository and run:
 
@@ -97,7 +97,7 @@ bash ./scripts/configure-managed-identity.sh \
   <sql-admin-password>
 ```
 
-**Option B: Using Azure Portal Query Editor**
+#### Option B: Using Azure Portal Query Editor
 
 1. Navigate to your SQL Server in Azure Portal
 2. Click on "Databases" → Select your database
@@ -159,6 +159,7 @@ az sql server firewall-rule create \
 ```
 
 Or use Azure Portal:
+
 1. Navigate to your SQL Server
 2. Click "Networking"
 3. Add your client IP address
@@ -194,7 +195,8 @@ Sample data is also automatically inserted if the table is empty.
 ### Issue: "The server is not currently configured to accept this token"
 
 **Error**: When trying to connect via Azure Portal Query Editor with Azure AD authentication, you get:
-```
+
+```text
 Microsoft Entra authentication
 Login failed for user. The server is not currently configured to accept this token
 ```
@@ -217,6 +219,7 @@ This script runs automatically during GitHub Actions deployment. For manual depl
 ### Issue: "Database not initialized" error
 
 **Solution**: Ensure the Web App has environment variables configured:
+
 - `SQL_SERVER`
 - `SQL_DATABASE`
 
@@ -228,7 +231,8 @@ These are automatically set by the Bicep template during deployment.
 
 ### Issue: Authentication error in local development
 
-**Solution**: 
+**Solution**:
+
 1. Ensure you are logged in to Azure CLI: `az login`
 2. Verify your Azure account has been granted access to the database (see Local Development Setup, Step 2)
 3. Check that your IP is allowed in SQL Server firewall rules
@@ -252,6 +256,7 @@ These are automatically set by the Bicep template during deployment.
 ## Monitoring
 
 Monitor your database in Azure Portal:
+
 1. Navigate to your SQL Database
 2. View metrics: DTU usage, storage, connections
 3. Set up alerts for high resource usage
@@ -260,6 +265,7 @@ Monitor your database in Azure Portal:
 ## Cost Management
 
 The template uses **Basic tier** by default:
+
 - 5 DTUs
 - 2 GB storage
 - ~$5/month

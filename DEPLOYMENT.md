@@ -297,6 +297,7 @@ After the infrastructure deployment completes, you need to configure Microsoft E
 ### Why This Step is Necessary
 
 The Bicep template configures:
+
 1. SQL Server with both SQL authentication (admin username/password) and support for Azure AD
 2. Web App with a system-assigned managed identity
 3. SQL Server with the Web App set as an Azure AD administrator
@@ -325,6 +326,7 @@ chmod +x scripts/setup-sql-entra-simple.sh
 ```
 
 This script will:
+
 1. Get the Web App's managed identity principal ID
 2. Set the Web App as the Azure AD administrator for the SQL Server
 3. Provide SQL commands to create the database user
@@ -384,24 +386,27 @@ az webapp restart \
 ### Verifying the Configuration
 
 1. Check the Web App logs in Azure Portal:
+
    - Navigate to your Web App → Monitoring → Log stream
    - Look for "Database connection pool established" message
    - If you see errors like "The server is not currently configured to accept this token", the authentication setup is incomplete
 
 2. Test the API endpoints:
+
    ```bash
    # Health check
    curl https://your-web-app.azurewebsites.net/api/health
-   
+
    # Get users (should work after successful setup)
    curl https://your-web-app.azurewebsites.net/api/users
    ```
 
 ### Common Issues with Microsoft Entra Authentication
 
-#### "Login failed for user '<token-identified principal>'"
+#### "Login failed for user '&lt;token-identified principal&gt;'"
 
 This error means the SQL Server can't validate the Azure AD token. Solutions:
+
 - Ensure the Web App is set as an Azure AD administrator on the SQL Server
 - Verify the database user was created: `CREATE USER [webapp-name] FROM EXTERNAL PROVIDER`
 - Check that the Web App has a system-assigned managed identity enabled
@@ -410,6 +415,7 @@ This error means the SQL Server can't validate the Azure AD token. Solutions:
 #### "The server is not currently configured to accept this token"
 
 This typically means:
+
 - The Azure AD admin is not configured on the SQL Server
 - The SQL Server firewall is blocking connections
 - Run the setup script or manually configure as described above
