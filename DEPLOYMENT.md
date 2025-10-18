@@ -202,19 +202,6 @@ Example (non-interactive):
    - `AZURE_RESOURCE_GROUP_NAME` (repository Variable)
      - Value: Name for your resource group (e.g., `simple-react-router-rg`)
 
-   **Optional: Specify Azure AD Administrator for SQL Server**
-
-   If you want to use a specific Azure AD user or group as the SQL Server administrator (instead of auto-detection):
-
-   - `SQL_AZUREAD_ADMIN_USER` (repository Variable)
-     - Value: Azure AD admin user email or service principal name (e.g., `admin@yourdomain.com`)
-   
-   - `SQL_AZUREAD_ADMIN_OBJECT_ID` (repository Variable)
-     - Value: Object ID of the Azure AD admin user (e.g., `12345678-1234-1234-1234-123456789abc`)
-     - You can find this in Azure Portal → Azure Active Directory → Users → Select user → Object ID
-
-   **Note**: Both `SQL_AZUREAD_ADMIN_USER` and `SQL_AZUREAD_ADMIN_OBJECT_ID` must be provided together. If not provided, the workflow will automatically use the service principal as the Azure AD administrator.
-
 Note: this workflow requires `AZURE_RESOURCE_GROUP_NAME` to be a repository Variable (not a secret). Set it under Settings → Variables → Actions.
 
 ### 3. Update Workflow Configuration (Optional)
@@ -302,6 +289,140 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 - **`infrastructure/main.bicep`**: Bicep template for Azure infrastructure (App Service Plan and Web App)
 - **`ui/web.config`**: IIS configuration for Azure App Service (handles SPA routing)
 - **`vite.config.ts`**: Vite configuration that includes plugin to copy web.config to build output
+
+## Post-Deployment: Setting Up Microsoft Entra Authentication for SQL Database
+
+After the infrastructure deployment completes, you need to configure Microsoft Entra (Azure AD) authentication for the SQL Database. The application uses the Web App's **Managed Identity** to connect to SQL Server, which provides a secure, password-less authentication method.
+
+### Why This Step is Necessary
+
+The Bicep template configures:
+1. SQL Server with both SQL authentication (admin username/password) and support for Azure AD
+2. Web App with a system-assigned managed identity
+3. SQL Server with the Web App set as an Azure AD administrator
+
+However, you still need to create a database user for the managed identity and grant it permissions.
+
+### Option 1: Using the Automated Script
+
+We provide a helper script to configure the database permissions. Run it after deployment:
+
+```bash
+# Make the script executable
+chmod +x scripts/setup-sql-entra-simple.sh
+
+# Run the script (replace with your actual values)
+./scripts/setup-sql-entra-simple.sh \
+  <resource-group-name> \
+  <sql-server-name> \
+  <database-name>
+
+# Example:
+# ./scripts/setup-sql-entra-simple.sh \
+#   simple-react-router-rg \
+#   simple-react-router-abc123-sql \
+#   UsersDB
+```
+
+This script will:
+1. Get the Web App's managed identity principal ID
+2. Set the Web App as the Azure AD administrator for the SQL Server
+3. Provide SQL commands to create the database user
+
+### Option 2: Manual Configuration
+
+If you prefer to configure manually or the script fails:
+
+#### Step 1: Get the Web App's Managed Identity
+
+```bash
+# Get the Web App name from your deployment outputs
+WEBAPP_NAME="your-web-app-name"
+RESOURCE_GROUP="your-resource-group"
+
+# Get the principal ID
+az webapp identity show \
+  --name $WEBAPP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query principalId -o tsv
+```
+
+#### Step 2: Set as Azure AD Admin
+
+```bash
+SQL_SERVER_NAME="your-sql-server-name"
+
+az sql server ad-admin create \
+  --resource-group $RESOURCE_GROUP \
+  --server-name $SQL_SERVER_NAME \
+  --display-name $WEBAPP_NAME \
+  --object-id <principal-id-from-step-1>
+```
+
+#### Step 3: Create Database User
+
+Connect to the SQL Database using Azure AD authentication (via Azure Portal Query Editor, Azure Data Studio, or SSMS) and run:
+
+```sql
+-- Create user for the managed identity
+CREATE USER [your-web-app-name] FROM EXTERNAL PROVIDER;
+
+-- Grant necessary permissions
+ALTER ROLE db_datareader ADD MEMBER [your-web-app-name];
+ALTER ROLE db_datawriter ADD MEMBER [your-web-app-name];
+ALTER ROLE db_ddladmin ADD MEMBER [your-web-app-name];
+```
+
+#### Step 4: Restart the Web App
+
+```bash
+az webapp restart \
+  --name $WEBAPP_NAME \
+  --resource-group $RESOURCE_GROUP
+```
+
+### Verifying the Configuration
+
+1. Check the Web App logs in Azure Portal:
+   - Navigate to your Web App → Monitoring → Log stream
+   - Look for "Database connection pool established" message
+   - If you see errors like "The server is not currently configured to accept this token", the authentication setup is incomplete
+
+2. Test the API endpoints:
+   ```bash
+   # Health check
+   curl https://your-web-app.azurewebsites.net/api/health
+   
+   # Get users (should work after successful setup)
+   curl https://your-web-app.azurewebsites.net/api/users
+   ```
+
+### Common Issues with Microsoft Entra Authentication
+
+#### "Login failed for user '<token-identified principal>'"
+
+This error means the SQL Server can't validate the Azure AD token. Solutions:
+- Ensure the Web App is set as an Azure AD administrator on the SQL Server
+- Verify the database user was created: `CREATE USER [webapp-name] FROM EXTERNAL PROVIDER`
+- Check that the Web App has a system-assigned managed identity enabled
+- Restart the Web App after making changes
+
+#### "The server is not currently configured to accept this token"
+
+This typically means:
+- The Azure AD admin is not configured on the SQL Server
+- The SQL Server firewall is blocking connections
+- Run the setup script or manually configure as described above
+
+#### Database User Already Exists Error
+
+If you see "User already exists" when running the CREATE USER command, it means the user was already created. Just grant the permissions:
+
+```sql
+ALTER ROLE db_datareader ADD MEMBER [your-web-app-name];
+ALTER ROLE db_datawriter ADD MEMBER [your-web-app-name];
+ALTER ROLE db_ddladmin ADD MEMBER [your-web-app-name];
+```
 
 ## Troubleshooting
 

@@ -254,6 +254,77 @@ To run the example application locally:
 
 The development server will hot-reload as you make changes to the source code in the `src/` directory.
 
+### Azure Development Debugging
+
+If you need to debug Azure deployment issues or test infrastructure changes locally, you can log into Azure using the service principal credentials:
+
+```bash
+./scripts/connect-azure-deployment-account.sh
+```
+
+This script:
+
+- Reads credentials from `azure-credentials.json`
+- Logs in to Azure using the service principal
+- Sets the default subscription
+- Displays connection confirmation
+
+**Prerequisites:**
+
+- Azure CLI installed (`az`)
+- Valid `azure-credentials.json` file in the project root
+- Either `jq` or Python 3 for JSON parsing
+
+After running this script, you can use Azure CLI commands to inspect resources, test Bicep deployments, or debug configuration issues.
+
+#### Configure Managed Identity Database Access
+
+To manually configure or troubleshoot managed identity access to the SQL Database:
+
+```bash
+./scripts/configure-managed-identity.sh \
+  <resource-group> \
+  <sql-server> \
+  <database-name> \
+  <web-app-name> \
+  <sql-admin-login> \
+  <sql-admin-password>
+```
+
+**Example:**
+
+```bash
+./scripts/configure-managed-identity.sh \
+  simple-react-router-rg \
+  server \
+  UsersDB \
+  simple-react-router-web \
+  sqladmin \
+  "MySecurePassword123!"
+```
+
+This script:
+
+- Retrieves the Web App's system-assigned managed identity
+- Creates a database user for the managed identity
+- Grants necessary permissions (db_datareader, db_datawriter, db_ddladmin)
+- Verifies the user was created successfully
+
+**Prerequisites:**
+
+- Azure CLI logged in (use `connect-azure-deployment-account.sh` first)
+- Python 3 with `pyodbc` (automatically installed if missing)
+- ODBC Driver 18 for SQL Server
+- Azure AD administrator configured on SQL Server
+- Web App must have system-assigned managed identity enabled
+
+**Use cases:**
+
+- Debugging database connection issues
+- Manually granting permissions after infrastructure changes
+- Testing managed identity authentication locally
+- Troubleshooting Azure AD authentication problems
+
 ## Deployment
 
 ### Azure Web App Deployment
@@ -278,18 +349,20 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 
 2. **Configure GitHub Secrets and Variables**:
 
-Required:
-- `AZURE_CREDENTIALS` (secret): Full JSON output from step 1
-- `SQL_ADMIN_PASSWORD` (secret): A secure password for SQL Server admin
-- `AZURE_SUBSCRIPTION_ID` (repository Variable): Your Azure subscription ID
+   Required:
 
-Optional:
-- `AZURE_WEBAPP_NAME` (repository Variable) — defaults to `simple-react-router-web`
-- `AZURE_RESOURCE_GROUP_NAME` (repository Variable) — defaults to `simple-react-router-rg`
-- `SQL_AZUREAD_ADMIN_USER` (repository Variable) — Azure AD admin user email (if you want a specific admin instead of auto-detection)
-- `SQL_AZUREAD_ADMIN_OBJECT_ID` (repository Variable) — Object ID of the Azure AD admin user (must be provided with SQL_AZUREAD_ADMIN_USER)
+   - `AZURE_CREDENTIALS` (secret): Full JSON output from step 1
+   - `SQL_ADMIN_PASSWORD` (secret): A secure password for SQL Server admin
+   - `AZURE_SUBSCRIPTION_ID` (repository Variable): Your Azure subscription ID
 
-Note: If `SQL_AZUREAD_ADMIN_USER` and `SQL_AZUREAD_ADMIN_OBJECT_ID` are not provided, the workflow will automatically use the current logged-in user (service principal) as the Azure AD administrator.
+   Optional:
+
+   - `AZURE_WEBAPP_NAME` (repository Variable) — defaults to `simple-react-router-web`
+   - `AZURE_RESOURCE_GROUP_NAME` (repository Variable) — defaults to `simple-react-router-rg`
+   - `SQL_AZUREAD_ADMIN_USER` (repository Variable) — Azure AD admin user email (if you want a specific admin instead of auto-detection)
+   - `SQL_AZUREAD_ADMIN_OBJECT_ID` (repository Variable) — Object ID of the Azure AD admin user (must be provided with SQL_AZUREAD_ADMIN_USER)
+
+   Note: If `SQL_AZUREAD_ADMIN_USER` and `SQL_AZUREAD_ADMIN_OBJECT_ID` are not provided, the workflow will automatically use the current logged-in user (service principal) as the Azure AD administrator.
 
 3. **Deploy**:
 

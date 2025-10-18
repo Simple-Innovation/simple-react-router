@@ -23,6 +23,7 @@ az deployment group create \
 ```
 
 **Note**: Replace `YourSecurePassword123!` with a strong password that meets Azure SQL requirements:
+
 - Minimum 8 characters
 - Contains uppercase letters
 - Contains lowercase letters
@@ -72,6 +73,7 @@ Replace `[your-web-app-name]` with the actual name of your Web App (e.g., `simpl
 ## Alternative: Using Azure Portal
 
 ### Step 1: Deploy Infrastructure
+
 1. Open Azure Portal
 2. Navigate to "Deploy a custom template"
 3. Click "Build your own template in the editor"

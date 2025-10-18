@@ -28,8 +28,7 @@ name: Deploy to Azure Web App
 
 on:
   push:
-    branches:
-      - main
+    # Runs on push to any branch
   workflow_dispatch:
     # Allows manual deployment from any branch
 
