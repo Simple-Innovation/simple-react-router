@@ -33,16 +33,37 @@ echo "============================================"
 echo ""
 
 # Check if user has sufficient permissions
-echo "Checking your Azure AD role permissions..."
+echo "Checking your Azure AD authentication..."
+
+# Try to get the current user/service principal ID
+# For interactive login (user): use 'az ad signed-in-user show'
+# For service principal: use 'az account show'
 CURRENT_USER_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
 
 if [[ -z "$CURRENT_USER_ID" ]]; then
-    echo "ERROR: Could not determine current user ID"
-    echo "Make sure you are logged in with 'az login'"
+    # Might be a service principal - try to get SP info
+    echo "Not signed in as a user, checking if logged in as service principal..."
+    
+    SP_APP_ID=$(az account show --query user.name -o tsv 2>/dev/null || echo "")
+    
+    if [[ -n "$SP_APP_ID" ]]; then
+        # Get the service principal object ID from the app ID
+        CURRENT_USER_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv 2>/dev/null || echo "")
+        
+        if [[ -n "$CURRENT_USER_ID" ]]; then
+            echo "Logged in as service principal: $SP_APP_ID"
+            echo "Service principal object ID: $CURRENT_USER_ID"
+        fi
+    fi
+fi
+
+if [[ -z "$CURRENT_USER_ID" ]]; then
+    echo "ERROR: Could not determine current user or service principal ID"
+    echo "Make sure you are logged in with 'az login' or 'az login --service-principal'"
     exit 1
 fi
 
-echo "Current user ID: $CURRENT_USER_ID"
+echo "Authenticated principal ID: $CURRENT_USER_ID"
 
 # Get the SQL Server's managed identity principal ID
 echo ""
