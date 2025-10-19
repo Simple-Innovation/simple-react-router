@@ -8,19 +8,18 @@ set -euo pipefail
 RESOURCE_GROUP="${1:-}"
 SQL_SERVER="${2:-}"
 DATABASE_NAME="${3:-}"
-SQL_ADMIN_LOGIN="${4:-}"
-SQL_ADMIN_PASSWORD="${5:-}"
 
 # Validate required parameters
-if [[ -z "$RESOURCE_GROUP" || -z "$SQL_SERVER" || -z "$DATABASE_NAME" || -z "$SQL_ADMIN_LOGIN" || -z "$SQL_ADMIN_PASSWORD" ]]; then
-    echo "Usage: $0 <resource-group> <sql-server> <database-name> <sql-admin-login> <sql-admin-password>"
+if [[ -z "$RESOURCE_GROUP" || -z "$SQL_SERVER" || -z "$DATABASE_NAME" ]]; then
+    echo "Usage: $0 <resource-group> <sql-server> <database-name>"
     echo ""
     echo "Parameters:"
     echo "  resource-group:    Azure resource group name"
     echo "  sql-server:        SQL Server name (without .database.windows.net)"
     echo "  database-name:     SQL Database name"
-    echo "  sql-admin-login:   SQL Server administrator login"
-    echo "  sql-admin-password: SQL Server administrator password"
+    echo ""
+    echo "Note: This script uses Azure AD authentication. Make sure you are logged in with 'az login'"
+    echo "      and have the necessary permissions to manage the SQL Database."
     exit 1
 fi
 
@@ -77,50 +76,99 @@ echo ""
 echo "Executing database initialization script..."
 echo ""
 
-# Check if sqlcmd is installed, if not install it
-if ! command -v sqlcmd &> /dev/null; then
-    echo "sqlcmd not found, installing..."
-    
-    # Add Microsoft repository and install sqlcmd
-    # Using non-interactive mode for CI/CD environments
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add - 2>/dev/null || true
-    
-    # Detect Ubuntu version
-    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "22.04")
-    
-    # Add the repository based on Ubuntu version
-    if [[ "$UBUNTU_VERSION" == "22.04" ]]; then
-        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
-    elif [[ "$UBUNTU_VERSION" == "20.04" ]]; then
-        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
-    else
-        # Default to 22.04 for newer versions
-        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
-    fi
-    
-    # Update package lists and install sqlcmd
-    sudo apt-get update -qq
-    sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
-    
-    # Add sqlcmd to PATH for this session
-    export PATH="$PATH:/opt/mssql-tools18/bin"
-    
-    echo "sqlcmd installed successfully"
+# Get Azure AD access token for SQL Database
+echo "Acquiring Azure AD access token for SQL Database authentication..."
+ACCESS_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken --output tsv 2>/dev/null)
+
+if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == *"ERROR"* || "$ACCESS_TOKEN" == *"WARNING"* ]]; then
+    echo "ERROR: Failed to acquire Azure AD access token"
+    echo "Make sure you are logged in with 'az login' and have access to the SQL Server"
+    exit 1
 fi
 
-# Execute SQL commands using sqlcmd
-# -S: server name
-# -d: database name
-# -U: username
-# -P: password
-# -C: trust server certificate (required for Azure SQL with TLS 1.2+)
-# -Q: query to execute
-sqlcmd -S "${SQL_SERVER}.database.windows.net" \
-    -d "$DATABASE_NAME" \
-    -U "$SQL_ADMIN_LOGIN" \
-    -P "$SQL_ADMIN_PASSWORD" \
-    -C \
-    -Q "$SQL_SCRIPT"
+echo "Successfully acquired access token"
+
+# Execute SQL commands using Python with pyodbc
+# This is the most reliable method for using Azure AD access tokens with SQL Server
+echo "Executing SQL script with Azure AD authentication using Python..."
+echo ""
+
+# Use set +e temporarily to prevent script from exiting on error
+set +e
+
+# Create Python script to execute SQL with access token
+python3 << PYTHON_SCRIPT
+import struct
+import sys
+
+try:
+    import pyodbc
+except ImportError:
+    print("Installing pyodbc...")
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyodbc"])
+    import pyodbc
+
+# Access token from environment
+access_token = """$ACCESS_TOKEN"""
+
+# Convert token to bytes for ODBC
+token_bytes = access_token.encode("utf-16-le")
+token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+
+# Connection string with access token
+conn_str = (
+    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+    f"SERVER=${SQL_SERVER}.database.windows.net;"
+    f"DATABASE=$DATABASE_NAME;"
+    f"Encrypt=yes;"
+    f"TrustServerCertificate=no;"
+)
+
+try:
+    # Connect using access token
+    conn = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
+    cursor = conn.cursor()
+    
+    # Execute SQL script
+    sql_script = """$SQL_SCRIPT"""
+    
+    # Execute each statement (split by GO if present)
+    statements = [s.strip() for s in sql_script.split('GO') if s.strip()]
+    
+    for statement in statements:
+        try:
+            cursor.execute(statement)
+            # Print messages from SQL Server (like PRINT statements)
+            while cursor.nextset():
+                pass
+            conn.commit()
+        except pyodbc.Error as e:
+            print(f"Error executing statement: {e}")
+            sys.exit(1)
+    
+    cursor.close()
+    conn.close()
+    print("✓ SUCCESS: SQL script executed successfully")
+    sys.exit(0)
+    
+except Exception as e:
+    print(f"ERROR: Failed to execute SQL script: {e}")
+    sys.exit(1)
+PYTHON_SCRIPT
+
+SQL_EXIT_CODE=$?
+
+set -e
+
+if [ $SQL_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "============================================"
+    echo "✗ ERROR: Failed to initialize database"
+    echo "============================================"
+    echo "SQL command failed with exit code: $SQL_EXIT_CODE"
+    exit 1
+fi
 
 echo ""
 echo "============================================"

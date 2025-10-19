@@ -110,6 +110,71 @@ az account show --query id --output tsv
 
 The command will output JSON credentials. **Save this entire JSON output** - you'll need it in the next step.
 
+### 1b. Grant Directory Readers Role to Service Principal (REQUIRED)
+
+**CRITICAL:** The service principal needs the **Directory Readers** role in Azure AD to grant the SQL Server's managed identity the necessary permissions during deployment.
+
+You have two options:
+
+#### Option A: Portal Method (Easier)
+
+1. Go to Azure Portal → Azure Active Directory → Roles and administrators
+2. Search for "Directory Readers"
+3. Click "Add assignments"
+4. Search for your service principal name (e.g., "simple-react-router-deploy")
+5. Add the assignment
+
+#### Option B: CLI Method (Faster)
+
+Run these commands as a **Global Administrator** or **Privileged Role Administrator**:
+
+```bash
+# Get the service principal object ID
+SP_OBJECT_ID=$(az ad sp list --display-name "simple-react-router-deploy" --query "[0].id" -o tsv)
+
+echo "Service Principal Object ID: $SP_OBJECT_ID"
+
+# Get Directory Readers role template ID
+ROLE_TEMPLATE_ID=$(az rest --method GET \
+  --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
+  --query "value[?displayName=='Directory Readers'].id | [0]" -o tsv)
+
+echo "Directory Readers Template ID: $ROLE_TEMPLATE_ID"
+
+# Activate the Directory Readers role (if not already active)
+az rest --method POST \
+  --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+  --headers "Content-Type=application/json" \
+  --body "{\"roleTemplateId\": \"$ROLE_TEMPLATE_ID\"}" 2>/dev/null || echo "Role already activated"
+
+# Get the active Directory Readers role ID
+ROLE_ID=$(az rest --method GET \
+  --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+  --query "value[?displayName=='Directory Readers'].id | [0]" -o tsv)
+
+echo "Active Directory Readers Role ID: $ROLE_ID"
+
+# Assign the role to the service principal
+az rest --method POST \
+  --uri "https://graph.microsoft.com/v1.0/directoryRoles/${ROLE_ID}/members/\$ref" \
+  --headers "Content-Type=application/json" \
+  --body "{\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/${SP_OBJECT_ID}\"}"
+
+echo "✓ Directory Readers role granted successfully!"
+```
+
+**Why is this needed?**
+
+The GitHub Actions workflow will automatically:
+
+1. Deploy SQL Server with a managed identity (via Bicep)
+2. Grant that SQL Server's identity the Directory Readers role (via script)
+3. Configure Azure AD authentication
+
+Without Directory Readers permission, step 2 will fail and you'll need to manually run the grant script with admin permissions.
+
+See [WHY_NOT_BICEP.md](WHY_NOT_BICEP.md) for a detailed explanation of why this can't be automated in Bicep.
+
 ### Authenticate the GitHub CLI (`gh`) using a Personal Access Token (PAT)
 
 If you want the helper script to upload secrets automatically (`--set-secrets`), `gh` must be authenticated with a token that has permission to manage Actions secrets for the repository. There are two common token types:
@@ -294,44 +359,164 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 
 After the infrastructure deployment completes, you need to configure Microsoft Entra (Azure AD) authentication for the SQL Database. The application uses the Web App's **Managed Identity** to connect to SQL Server, which provides a secure, password-less authentication method.
 
+**⚠️ CRITICAL:** This is a **required** post-deployment step. The application will not work without it.
+
 ### Why This Step is Necessary
 
-The Bicep template configures:
+The Bicep template automatically configures:
 
-1. SQL Server with both SQL authentication (admin username/password) and support for Azure AD
-2. Web App with a system-assigned managed identity
-3. SQL Server with the Web App set as an Azure AD administrator
+1. ✓ SQL Server with a system-assigned managed identity
+2. ✓ SQL Server with both SQL authentication and support for Azure AD
+3. ✓ Web App with a system-assigned managed identity
 
-However, you still need to create a database user for the managed identity and grant it permissions.
+However, the following steps **cannot** be automated in Bicep and must be done manually:
 
-### Option 1: Using the Automated Script
+4. ✗ Grant SQL Server's identity the "Directory Readers" role in Azure AD
+5. ✗ Configure an Azure AD administrator for the SQL Server
+6. ✗ Create a database user for the web app's managed identity
 
-We provide a helper script to configure the database permissions. Run it after deployment:
+**Why can't this be automated?** The Directory Readers role assignment requires Azure AD Graph API calls (not ARM) and special Azure AD admin permissions that are separate from Azure subscription permissions.
+
+### Complete Setup Process
+
+Follow these three steps **in order** after deployment. See [SQL_SERVER_AZURE_AD_SETUP.md](SQL_SERVER_AZURE_AD_SETUP.md) for detailed explanations.
+
+#### Prerequisites
+
+- Azure CLI installed and logged in (`az login`)
+- **Global Administrator** or **Privileged Role Administrator** role in Azure AD (for Step 1 only)
+- SQL Server command-line tools installed (for Step 3) - run `./scripts/install-sqlcmd.sh`
+
+#### Step 1: Grant Directory Readers Role to SQL Server (Requires Azure AD Admin)
+
+**This step requires Global Administrator or Privileged Role Administrator permissions.**
 
 ```bash
-# Make the script executable
-chmod +x scripts/setup-sql-entra-simple.sh
-
-# Run the script (replace with your actual values)
-./scripts/setup-sql-entra-simple.sh \
-  <resource-group-name> \
-  <sql-server-name> \
-  <database-name>
+./scripts/grant-sql-directory-reader.sh <resource-group> <sql-server-name>
 
 # Example:
-# ./scripts/setup-sql-entra-simple.sh \
-#   simple-react-router-rg \
-#   simple-react-router-abc123-sql \
-#   UsersDB
+./scripts/grant-sql-directory-reader.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql
 ```
 
-This script will:
+This grants the SQL Server's managed identity the ability to resolve other Azure AD principals.
 
-1. Get the Web App's managed identity principal ID
-2. Set the Web App as the Azure AD administrator for the SQL Server
-3. Provide SQL commands to create the database user
+**If you don't have these permissions:** Ask your Azure AD administrator to run this script or manually grant the "Directory Readers" role to the SQL Server's managed identity.
 
-### Option 2: Manual Configuration
+#### Step 2: Configure Azure AD Administrator (Wait 5-10 minutes after Step 1)
+
+```bash
+./scripts/configure-azuread-admin.sh <resource-group> <sql-server-name>
+
+# Example (using current logged-in user):
+./scripts/configure-azuread-admin.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql
+
+# Or specify a specific user:
+./scripts/configure-azuread-admin.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql \
+  admin@example.com \
+  12345678-1234-1234-1234-123456789012
+```
+
+This enables Azure AD authentication on the SQL Server.
+
+#### Step 3: Grant Managed Identity Database Access (Wait 5-10 minutes after Step 2)
+
+```bash
+./scripts/configure-managed-identity.sh <resource-group> <sql-server> <database> <web-app-name>
+
+# Example:
+./scripts/configure-managed-identity.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql \
+  UsersDB \
+  simple-react-router-web
+```
+
+This creates a database user for the web app's managed identity and grants permissions.
+
+#### Step 4: Initialize Database Schema
+
+```bash
+./scripts/initialize-database.sh <resource-group> <sql-server> <database> <web-app-name>
+
+# Example:
+./scripts/initialize-database.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql \
+  UsersDB \
+  simple-react-router-web
+```
+
+This creates the `Users` table needed by the application.
+
+### Complete Example
+
+Here's the complete sequence with wait times:
+
+```bash
+# Set your values (get these from Azure deployment outputs)
+RESOURCE_GROUP="simple-react-router-rg"
+SQL_SERVER="simple-react-router-abc123-sql"  # Without .database.windows.net
+DATABASE_NAME="UsersDB"
+WEB_APP_NAME="simple-react-router-web"
+
+# Step 1: Grant Directory Readers (requires Azure AD admin permissions)
+./scripts/grant-sql-directory-reader.sh "$RESOURCE_GROUP" "$SQL_SERVER"
+
+# Wait for Azure AD changes to propagate
+echo "Waiting 60 seconds for Azure AD to propagate..."
+sleep 60
+
+# Step 2: Configure Azure AD admin
+./scripts/configure-azuread-admin.sh "$RESOURCE_GROUP" "$SQL_SERVER"
+
+# Wait for configuration to propagate
+echo "Waiting 60 seconds for Azure AD admin configuration to propagate..."
+sleep 60
+
+# Step 3: Grant managed identity access
+./scripts/configure-managed-identity.sh "$RESOURCE_GROUP" "$SQL_SERVER" "$DATABASE_NAME" "$WEB_APP_NAME"
+
+# Step 4: Initialize database
+./scripts/initialize-database.sh "$RESOURCE_GROUP" "$SQL_SERVER" "$DATABASE_NAME" "$WEB_APP_NAME"
+
+echo "Setup complete!"
+```
+
+### What If I Get Errors?
+
+#### "Principal could not be resolved" Error
+
+**Full error:** `Principal 'simple-react-router-web' could not be resolved. Error message: 'Server identity is not configured...'`
+
+**Cause:** SQL Server doesn't have Directory Readers role.
+
+**Solution:** Run Step 1 (`grant-sql-directory-reader.sh`) and wait 5-10 minutes before proceeding.
+
+#### "You do not have permission to grant Directory Readers"
+
+**Cause:** You lack Azure AD admin permissions.
+
+**Solution:** Ask your Global Administrator or Privileged Role Administrator to run Step 1 for you.
+
+#### "Failed to create user"
+
+**Cause:** Azure AD admin not configured or changes haven't propagated.
+
+**Solution:**
+
+- Verify Step 2 completed successfully
+- Wait 5-10 minutes
+- Retry Step 3
+
+See [SQL_SERVER_AZURE_AD_SETUP.md](SQL_SERVER_AZURE_AD_SETUP.md) for detailed troubleshooting.
+
+### Old Option: Manual Configuration (Not Recommended)
 
 If you prefer to configure manually or the script fails:
 

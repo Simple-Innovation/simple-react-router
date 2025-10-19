@@ -10,20 +10,19 @@ RESOURCE_GROUP="${1:-}"
 SQL_SERVER="${2:-}"
 DATABASE_NAME="${3:-}"
 WEB_APP_NAME="${4:-}"
-SQL_ADMIN_LOGIN="${5:-}"
-SQL_ADMIN_PASSWORD="${6:-}"
 
 # Validate required parameters
-if [[ -z "$RESOURCE_GROUP" || -z "$SQL_SERVER" || -z "$DATABASE_NAME" || -z "$WEB_APP_NAME" || -z "$SQL_ADMIN_LOGIN" || -z "$SQL_ADMIN_PASSWORD" ]]; then
-    echo "Usage: $0 <resource-group> <sql-server> <database-name> <web-app-name> <sql-admin-login> <sql-admin-password>"
+if [[ -z "$RESOURCE_GROUP" || -z "$SQL_SERVER" || -z "$DATABASE_NAME" || -z "$WEB_APP_NAME" ]]; then
+    echo "Usage: $0 <resource-group> <sql-server> <database-name> <web-app-name>"
     echo ""
     echo "Parameters:"
     echo "  resource-group:    Azure resource group name"
     echo "  sql-server:        SQL Server name (without .database.windows.net)"
     echo "  database-name:     SQL Database name"
     echo "  web-app-name:      Web App name (managed identity name)"
-    echo "  sql-admin-login:   SQL Server administrator login"
-    echo "  sql-admin-password: SQL Server administrator password"
+    echo ""
+    echo "Note: This script uses Azure AD authentication. Make sure you are logged in with 'az login'"
+    echo "      and have the necessary permissions to manage the SQL Database."
     exit 1
 fi
 
@@ -132,35 +131,11 @@ echo ""
 echo "Executing SQL commands to grant managed identity access..."
 echo ""
 
-# Check if sqlcmd is installed, if not install it
+# Check if sqlcmd is installed
 if ! command -v sqlcmd &> /dev/null; then
-    echo "sqlcmd not found, installing..."
-    
-    # Add Microsoft repository and install sqlcmd
-    # Using non-interactive mode for CI/CD environments
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add - 2>/dev/null || true
-    
-    # Detect Ubuntu version
-    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "22.04")
-    
-    # Add the repository based on Ubuntu version
-    if [[ "$UBUNTU_VERSION" == "22.04" ]]; then
-        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
-    elif [[ "$UBUNTU_VERSION" == "20.04" ]]; then
-        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/20.04/prod focal main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
-    else
-        # Default to 22.04 for newer versions
-        echo "deb [arch=amd64] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
-    fi
-    
-    # Update package lists and install sqlcmd
-    sudo apt-get update -qq
-    sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
-    
-    # Add sqlcmd to PATH for this session
-    export PATH="$PATH:/opt/mssql-tools18/bin"
-    
-    echo "sqlcmd installed successfully"
+    echo "ERROR: sqlcmd is not installed"
+    echo "Please run: ./scripts/install-sqlcmd.sh"
+    exit 1
 fi
 
 # Get Azure AD access token for SQL Database
@@ -174,72 +149,36 @@ if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == *"ERROR"* || "$ACCESS_TOKEN" == *
 fi
 
 echo "Successfully acquired access token"
+SQLCMDPASSWORD="$ACCESS_TOKEN"
 
-# Execute SQL commands using Python with pyodbc
-# This is the most reliable method for using Azure AD access tokens with SQL Server
-echo "Executing SQL script with Azure AD authentication using Python..."
+# Execute SQL commands using sqlcmd with Azure AD authentication
+echo "Executing SQL script with Azure AD authentication using sqlcmd..."
 echo ""
+
+# Create temporary SQL file
+TEMP_SQL_FILE=$(mktemp)
+echo "$SQL_SCRIPT" > "$TEMP_SQL_FILE"
 
 # Use set +e temporarily to prevent script from exiting on error
 set +e
 
-# Create Python script to execute SQL with access token
-python3 << PYTHON_SCRIPT
-import struct
-import sys
-
-try:
-    import pyodbc
-except ImportError:
-    print("Installing pyodbc...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyodbc"])
-    import pyodbc
-
-# Access token from environment
-access_token = """$ACCESS_TOKEN"""
-
-# Convert token to bytes for ODBC
-token_bytes = access_token.encode("utf-16-le")
-token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
-
-# Connection string with access token
-conn_str = (
-    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-    f"SERVER=${SQL_SERVER}.database.windows.net;"
-    f"DATABASE=$DATABASE_NAME;"
-    f"Encrypt=yes;"
-    f"TrustServerCertificate=no;"
-)
-
-try:
-    # Connect using access token
-    conn = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
-    cursor = conn.cursor()
-    
-    # Execute SQL script
-    sql_script = """$SQL_SCRIPT"""
-    
-    # Execute each statement (split by GO if present)
-    statements = [s.strip() for s in sql_script.split('GO') if s.strip()]
-    
-    for statement in statements:
-        try:
-            cursor.execute(statement)
-            conn.commit()
-        except pyodbc.Error as e:
-            print(f"Error executing statement: {e}")
-            sys.exit(1)
-    
-    cursor.close()
-    conn.close()
-    print("✓ SUCCESS: SQL script executed successfully")
-    sys.exit(0)
-    
-except Exception as e:
-    print(f"ERROR: Failed to execute SQL script: {e}")
-    sys.exit(1)
-PYTHON_SCRIPT
+# Execute SQL script with sqlcmd
+# -S: Server name
+# -d: Database name
+# -G: Use Azure Active Directory authentication
+# -P: Access token (when used with -G)
+# -N: Encrypt connection
+# -C: Trust server certificate
+# -i: Input file
+# -b: Terminate batch job if there is an error
+sqlcmd -S "${SQL_SERVER}.database.windows.net" \
+       -d "$DATABASE_NAME" \
+       -G \
+       -P "$ACCESS_TOKEN" \
+       -N \
+       -C \
+       -i "$TEMP_SQL_FILE" \
+       -b
 
 SQL_EXIT_CODE=$?
 
@@ -270,45 +209,17 @@ fi
 echo ""
 echo "Verifying user creation..."
 
-# Use Python/pyodbc for verification as well (consistent with main execution)
-USER_CHECK=$(python3 << VERIFY_SCRIPT
-import struct
-import sys
-
-try:
-    import pyodbc
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyodbc"])
-    import pyodbc
-
-access_token = """$ACCESS_TOKEN"""
-token_bytes = access_token.encode("utf-16-le")
-token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
-
-conn_str = (
-    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-    f"SERVER=${SQL_SERVER}.database.windows.net;"
-    f"DATABASE=$DATABASE_NAME;"
-    f"Encrypt=yes;"
-    f"TrustServerCertificate=no;"
-)
-
-try:
-    conn = pyodbc.connect(conn_str, attrs_before={1256: token_struct})
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sys.database_principals WHERE type IN ('E', 'X') AND name = '$WEB_APP_NAME'")
-    result = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    if result:
-        print(result[0])
-    sys.exit(0)
-except Exception as e:
-    print(f"", file=sys.stderr)
-    sys.exit(1)
-VERIFY_SCRIPT
-)
+# Use sqlcmd for verification as well (consistent with main execution)
+USER_CHECK=$(sqlcmd -S "${SQL_SERVER}.database.windows.net" \
+                    -d "$DATABASE_NAME" \
+                    -G \
+                    -P "$ACCESS_TOKEN" \
+                    -N \
+                    -C \
+                    -h -1 \
+                    -W \
+                    -Q "SET NOCOUNT ON; SELECT name FROM sys.database_principals WHERE type IN ('E', 'X') AND name = '$WEB_APP_NAME'" \
+                    2>/dev/null | tr -d '[:space:]')
 
 VERIFY_EXIT_CODE=$?
 
