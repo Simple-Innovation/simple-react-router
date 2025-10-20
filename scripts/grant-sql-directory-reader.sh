@@ -106,15 +106,62 @@ if [[ -z "$DIRECTORY_READERS_ROLE_ID" ]]; then
         --headers "Content-Type=application/json" \
         --query "value[?displayName=='Directory Readers'].id | [0]" \
         --output tsv 2>/dev/null || echo "")
-    
+
+    # If not found by exact match, try a fuzzy, case-insensitive search using Python
     if [[ -z "$ROLE_TEMPLATE_ID" ]]; then
-        echo "ERROR: Could not find Directory Readers role template"
+        echo "Directory Readers template not found by exact name - trying fuzzy search (case-insensitive)..."
+        ROLE_TEMPLATE_ID=$(az rest \
+            --method GET \
+            --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
+            --headers "Content-Type=application/json" \
+            --output json 2>/dev/null || echo "{}" | python3 - <<'PY'
+import sys, json
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+for item in data.get('value', []):
+    name = item.get('displayName', '')
+    if 'directory' in name.lower() and 'read' in name.lower():
+        print(item.get('id',''))
+        sys.exit(0)
+print('')
+PY
+)
+    fi
+
+    if [[ -z "$ROLE_TEMPLATE_ID" ]]; then
+        echo "ERROR: Could not find Directory Readers role template (exact or fuzzy search)"
+        echo "Listing available role templates (displayName -> id) for diagnostics:"
+        # Try to print a user-friendly table of role templates
+        az rest \
+            --method GET \
+            --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
+            --headers "Content-Type=application/json" \
+            --output json 2>/dev/null | python3 - <<'PY'
+import sys,json
+try:
+    j=json.load(sys.stdin)
+except Exception:
+    j={}
+for v in j.get('value',[])[:200]:
+    print(f"{v.get('displayName','<no-name>')} -> {v.get('id','')}")
+PY
+
+        echo ""
+        echo "Manual activation steps you can ask an Azure AD administrator to run:"
+        echo "  1. Find the role template ID from the list above (the line with 'Directory Readers')"
+        echo "  2. Activate the role with the following command (requires Azure AD admin):"
+        echo "     az rest --method POST --uri 'https://graph.microsoft.com/v1.0/directoryRoles' --headers 'Content-Type=application/json' --body \"{\\\"roleTemplateId\\\": \\\"<ROLE_TEMPLATE_ID>\\\"}\""
+        echo "  3. Wait a minute and re-run this script"
+        echo ""
+        echo "If you don't see a candidate named 'Directory Readers' in the list above, your tenant may have restricted role templates or the Graph API access scope for the current credentials is limited. Please have an Azure AD administrator review available roles in the portal and activate the 'Directory Readers' role template if needed."
         exit 1
     fi
-    
+
     echo "Directory Readers template ID: $ROLE_TEMPLATE_ID"
     echo "Activating Directory Readers role..."
-    
+
     # Activate the role
     az rest \
         --method POST \
@@ -122,9 +169,9 @@ if [[ -z "$DIRECTORY_READERS_ROLE_ID" ]]; then
         --headers "Content-Type=application/json" \
         --body "{\"roleTemplateId\": \"$ROLE_TEMPLATE_ID\"}" \
         --output none 2>/dev/null || {
-            echo "WARNING: Could not activate Directory Readers role (it may already be active)"
+            echo "WARNING: Could not activate Directory Readers role (it may already be active or you may lack permissions)"
         }
-    
+
     # Try to get the role ID again
     DIRECTORY_READERS_ROLE_ID=$(az rest \
         --method GET \
@@ -132,9 +179,11 @@ if [[ -z "$DIRECTORY_READERS_ROLE_ID" ]]; then
         --headers "Content-Type=application/json" \
         --query "value[?displayName=='Directory Readers'].id | [0]" \
         --output tsv 2>/dev/null || echo "")
-    
+
     if [[ -z "$DIRECTORY_READERS_ROLE_ID" ]]; then
         echo "ERROR: Could not get Directory Readers role ID even after activation attempt"
+        echo "This may be due to insufficient Graph API permissions for the current principal."
+        echo "Ask an Azure AD administrator to activate the 'Directory Readers' role template and/or run this script with elevated permissions."
         exit 1
     fi
 fi

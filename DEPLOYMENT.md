@@ -110,60 +110,101 @@ az account show --query id --output tsv
 
 The command will output JSON credentials. **Save this entire JSON output** - you'll need it in the next step.
 
-### 1b. Grant Directory Readers Role to Service Principal (REQUIRED)
+### 1b. Grant Microsoft Graph API Permissions to Service Principal (REQUIRED)
 
-**CRITICAL:** The service principal needs the **Directory Readers** role in Azure AD to grant the SQL Server's managed identity the necessary permissions during deployment.
+**CRITICAL:** The service principal needs **Microsoft Graph API permissions** to grant the SQL Server's managed identity the Directory Readers role during automated deployment.
 
-You have two options:
+#### Required Permission
 
-#### Option A: Portal Method (Easier)
+Your service principal needs this **Application permission** from Microsoft Graph:
 
-1. Go to Azure Portal → Azure Active Directory → Roles and administrators
-2. Search for "Directory Readers"
-3. Click "Add assignments"
-4. Search for your service principal name (e.g., "simple-react-router-deploy")
-5. Add the assignment
+- **`RoleManagement.ReadWrite.Directory`**
 
-#### Option B: CLI Method (Faster)
+This allows the deployment workflow to:
 
-Run these commands as a **Global Administrator** or **Privileged Role Administrator**:
+- Read and activate directory role templates
+- Grant the Directory Readers role to SQL Server's managed identity
+- Verify role assignments
+
+#### Grant the Permission
+
+You have three options:
+
+##### Option A: Automated Script (Recommended)
+
+Run the helper script as a **Global Administrator** or **Application Administrator**:
 
 ```bash
-# Get the service principal object ID
-SP_OBJECT_ID=$(az ad sp list --display-name "simple-react-router-deploy" --query "[0].id" -o tsv)
-
-echo "Service Principal Object ID: $SP_OBJECT_ID"
-
-# Get Directory Readers role template ID
-ROLE_TEMPLATE_ID=$(az rest --method GET \
-  --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
-  --query "value[?displayName=='Directory Readers'].id | [0]" -o tsv)
-
-echo "Directory Readers Template ID: $ROLE_TEMPLATE_ID"
-
-# Activate the Directory Readers role (if not already active)
-az rest --method POST \
-  --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
-  --headers "Content-Type=application/json" \
-  --body "{\"roleTemplateId\": \"$ROLE_TEMPLATE_ID\"}" 2>/dev/null || echo "Role already activated"
-
-# Get the active Directory Readers role ID
-ROLE_ID=$(az rest --method GET \
-  --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
-  --query "value[?displayName=='Directory Readers'].id | [0]" -o tsv)
-
-echo "Active Directory Readers Role ID: $ROLE_ID"
-
-# Assign the role to the service principal
-az rest --method POST \
-  --uri "https://graph.microsoft.com/v1.0/directoryRoles/${ROLE_ID}/members/\$ref" \
-  --headers "Content-Type=application/json" \
-  --body "{\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/${SP_OBJECT_ID}\"}"
-
-echo "✓ Directory Readers role granted successfully!"
+./scripts/grant-sp-graph-permissions.sh 66868a16-6798-455c-bb79-f53a52e8fa16
 ```
 
-**Why is this needed?**
+Replace the App ID with your service principal's client ID from step 1.
+
+##### Option B: Azure Portal (Visual)
+
+1. Go to [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations**
+2. Find your service principal app (search by name or App ID)
+3. Click **API permissions** → **Add a permission**
+4. Select **Microsoft Graph** → **Application permissions**
+5. Search for and add: **`RoleManagement.ReadWrite.Directory`**
+6. Click **Grant admin consent for [Your Organization]** ⚠️ (Requires Global Admin or Privileged Role Admin)
+7. Verify the permission shows a green checkmark under "Status"
+
+##### Option C: Azure CLI (Fast)
+
+Run these commands as a **Global Administrator** or **Application Administrator**:
+
+```bash
+# Your service principal App ID (from step 1)
+SP_APP_ID="your-service-principal-app-id"
+
+# Get the service principal object ID
+SP_OBJECT_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv)
+
+# Get Microsoft Graph service principal ID
+GRAPH_SP_ID=$(az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].id" -o tsv)
+
+# Get the RoleManagement.ReadWrite.Directory permission ID
+ROLE_PERMISSION_ID=$(az ad sp show --id "$GRAPH_SP_ID" --query "appRoles[?value=='RoleManagement.ReadWrite.Directory'].id | [0]" -o tsv)
+
+# Grant the permission
+az rest \
+  --method POST \
+  --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$SP_OBJECT_ID/appRoleAssignments" \
+  --headers "Content-Type=application/json" \
+  --body "{
+    \"principalId\": \"$SP_OBJECT_ID\",
+    \"resourceId\": \"$GRAPH_SP_ID\",
+    \"appRoleId\": \"$ROLE_PERMISSION_ID\"
+  }"
+
+echo "✓ Permission granted successfully!"
+echo "⏱️  Wait 5-10 minutes for permission propagation before running the workflow."
+```
+
+#### Verification
+
+After granting the permission, verify it was applied:
+
+```bash
+SP_APP_ID="your-service-principal-app-id"
+SP_OBJECT_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv)
+
+az rest \
+  --method GET \
+  --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$SP_OBJECT_ID/appRoleAssignments" \
+  --query "value[?resourceDisplayName=='Microsoft Graph'].{Permission:appRoleId, Resource:resourceDisplayName}"
+```
+
+You should see the `RoleManagement.ReadWrite.Directory` permission listed.
+
+#### 📚 Detailed Guide
+
+For more detailed information, troubleshooting, and alternative methods, see:
+
+- **[GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md](GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md)** - Complete guide with screenshots and troubleshooting
+
+#### Why is this needed?
 
 The GitHub Actions workflow will automatically:
 

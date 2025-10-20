@@ -196,6 +196,65 @@ Configures Azure AD administrator for SQL Server to enable Azure AD authenticati
 - SQL Server must have Directory Readers role (run `grant-sql-directory-reader.sh` first)
 - User running the script needs sufficient permissions to modify SQL Server settings
 
+### grant-sp-graph-permissions.sh
+
+**NEW**: Grants Microsoft Graph API permissions to a service principal, specifically the `RoleManagement.ReadWrite.Directory` permission needed for automated Azure AD role assignments in CI/CD pipelines.
+
+**⚠️ CRITICAL:** This is a **prerequisite for automated deployment**. The service principal used by GitHub Actions needs this permission to automatically grant the Directory Readers role to SQL Server during deployment.
+
+**Usage:**
+
+```bash
+./scripts/grant-sp-graph-permissions.sh <service-principal-app-id>
+```
+
+**Parameters:**
+
+- `service-principal-app-id`: The application (client) ID of your service principal
+
+**Example:**
+
+```bash
+./scripts/grant-sp-graph-permissions.sh 66868a16-6798-455c-bb79-f53a52e8fa16
+```
+
+**What it does:**
+
+- Looks up your service principal by App ID
+- Retrieves the Microsoft Graph service principal and the RoleManagement.ReadWrite.Directory permission ID
+- Checks if the permission is already granted
+- Grants the permission if not already present
+- Provides verification commands to confirm the grant
+
+**When to use:**
+
+- **During initial setup** before running GitHub Actions deployment workflow
+- When you want to enable fully automated deployment without manual intervention
+- If you see errors about insufficient permissions to grant Directory Readers role
+
+**Requirements:**
+
+- Azure CLI must be installed and authenticated (`az login`)
+- **Global Administrator** or **Application Administrator** role in Azure AD
+- Permission to grant admin consent for API permissions
+
+**Alternative methods:**
+
+If you don't have sufficient permissions or prefer a different method, see the detailed guide:
+
+- **[GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md](../GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md)** - Complete guide with Azure Portal and PowerShell methods
+
+**Why is this needed?**
+
+This permission allows the service principal (used by GitHub Actions) to:
+
+- Read directory roles and role templates
+- Activate directory role templates (like "Directory Readers")
+- Assign managed identities to directory roles
+- Automate the Azure AD setup that would otherwise require manual intervention
+
+Without this permission, the GitHub Actions workflow will fail when trying to grant the Directory Readers role to SQL Server, and you'll need to run `grant-sql-directory-reader.sh` manually as an administrator.
+
 ### grant-sql-directory-reader.sh
 
 **NEW**: Grants the SQL Server's managed identity the "Directory Readers" role in Azure AD, which is **required** for the SQL Server to resolve other Azure AD principals.

@@ -73,7 +73,10 @@ graph TD
 
 **Prerequisites:**
 
-- Service principal has Directory Readers role in Azure AD
+- Service principal has Contributor role (subscription)
+- Service principal has `RoleManagement.ReadWrite.Directory` Microsoft Graph API permission
+  - Grant with: `./scripts/grant-sp-graph-permissions.sh <app-id>`
+  - See: [GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md](GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md)
 
 **Process:**
 
@@ -89,7 +92,7 @@ git push origin main
 **Prerequisites:**
 
 - Service principal has Contributor role (subscription)
-- NO Directory Readers role in Azure AD
+- Service principal does NOT have Microsoft Graph API permissions
 
 **Process:**
 

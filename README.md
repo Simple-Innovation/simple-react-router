@@ -347,7 +347,21 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
      --role contributor --scopes /subscriptions/{subscription-id} --sdk-auth
    ```
 
-2. **Configure GitHub Secrets and Variables**:
+2. **Grant Microsoft Graph API Permissions** (REQUIRED):
+
+   The service principal needs `RoleManagement.ReadWrite.Directory` permission to configure Azure AD authentication for SQL Server.
+
+   **Automated method** (requires Global Administrator):
+
+   ```bash
+   ./scripts/grant-sp-graph-permissions.sh <service-principal-app-id>
+   ```
+
+   **Manual method**: Follow the detailed steps in [GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md](GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md)
+
+3. **Configure GitHub Secrets and Variables**:
+
+4. **Configure GitHub Secrets and Variables**:
 
    Required:
 
@@ -364,7 +378,7 @@ This repository includes a GitHub Actions workflow for automatic deployment to A
 
    Note: If `SQL_AZUREAD_ADMIN_USER` and `SQL_AZUREAD_ADMIN_OBJECT_ID` are not provided, the workflow will automatically use the current logged-in user (service principal) as the Azure AD administrator.
 
-3. **Deploy**:
+5. **Deploy**:
 
    - Push to `main` branch or manually trigger the workflow
    - Infrastructure and application will be deployed automatically
