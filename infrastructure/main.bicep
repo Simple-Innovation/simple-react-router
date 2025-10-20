@@ -46,6 +46,9 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 resource sqlServer 'Microsoft.Sql/servers@2023-05-01-preview' = {
   name: sqlServerName
   location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     administratorLogin: sqlAdminLogin
     administratorLoginPassword: sqlAdminPassword
@@ -135,3 +138,4 @@ output sqlServerName string = sqlServer.name
 output sqlServerFqdn string = sqlServer.properties.fullyQualifiedDomainName
 output sqlDatabaseName string = sqlDatabaseName
 output webAppPrincipalId string = webApp.identity.principalId
+output sqlServerPrincipalId string = sqlServer.identity.principalId

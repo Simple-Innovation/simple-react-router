@@ -23,6 +23,7 @@ az deployment group create \
 ```
 
 **Note**: Replace `YourSecurePassword123!` with a strong password that meets Azure SQL requirements:
+
 - Minimum 8 characters
 - Contains uppercase letters
 - Contains lowercase letters
@@ -72,6 +73,7 @@ Replace `[your-web-app-name]` with the actual name of your Web App (e.g., `simpl
 ## Alternative: Using Azure Portal
 
 ### Step 1: Deploy Infrastructure
+
 1. Open Azure Portal
 2. Navigate to "Deploy a custom template"
 3. Click "Build your own template in the editor"
@@ -81,7 +83,7 @@ Replace `[your-web-app-name]` with the actual name of your Web App (e.g., `simpl
 
 ### Step 2: Grant Managed Identity Access
 
-**Option A: Using the automated script (Recommended)**
+#### Option A: Using the automated script (Recommended)
 
 Download or clone the repository and run:
 
@@ -95,7 +97,7 @@ bash ./scripts/configure-managed-identity.sh \
   <sql-admin-password>
 ```
 
-**Option B: Using Azure Portal Query Editor**
+#### Option B: Using Azure Portal Query Editor
 
 1. Navigate to your SQL Server in Azure Portal
 2. Click on "Databases" → Select your database
@@ -104,9 +106,11 @@ bash ./scripts/configure-managed-identity.sh \
 
 ## Local Development Setup
 
-**Security Note**: The application only supports Azure Managed Identity authentication. SQL authentication has been disabled for security compliance.
+**Security Note**: The application uses Azure Managed Identity authentication in production. For local development and database administration, both SQL authentication (with admin credentials) and Azure AD authentication are supported.
 
-For local development, you must authenticate using Azure credentials:
+**Azure AD Authentication Setup**: During deployment, the workflow automatically configures an Azure AD administrator for the SQL Server, enabling Azure AD authentication. This allows you to connect using your Azure account credentials.
+
+For local development, you can authenticate using Azure credentials:
 
 ### 1. Install and configure Azure CLI
 
@@ -155,6 +159,7 @@ az sql server firewall-rule create \
 ```
 
 Or use Azure Portal:
+
 1. Navigate to your SQL Server
 2. Click "Networking"
 3. Add your client IP address
@@ -187,9 +192,34 @@ Sample data is also automatically inserted if the table is empty.
 
 ## Troubleshooting
 
+### Issue: "The server is not currently configured to accept this token"
+
+**Error**: When trying to connect via Azure Portal Query Editor with Azure AD authentication, you get:
+
+```text
+Microsoft Entra authentication
+Login failed for user. The server is not currently configured to accept this token
+```
+
+**Solution**: The SQL Server needs an Azure AD administrator configured. Run the configuration script:
+
+```bash
+bash ./scripts/configure-azuread-admin.sh \
+  <resource-group> \
+  <sql-server-name>
+```
+
+This script runs automatically during GitHub Actions deployment. For manual deployments, you need to run it after infrastructure deployment, or configure the Azure AD admin via Azure Portal:
+
+1. Navigate to your SQL Server in Azure Portal
+2. Click "Microsoft Entra ID" in the left menu
+3. Click "Set admin" and select your Azure AD user
+4. Click "Save"
+
 ### Issue: "Database not initialized" error
 
 **Solution**: Ensure the Web App has environment variables configured:
+
 - `SQL_SERVER`
 - `SQL_DATABASE`
 
@@ -201,7 +231,8 @@ These are automatically set by the Bicep template during deployment.
 
 ### Issue: Authentication error in local development
 
-**Solution**: 
+**Solution**:
+
 1. Ensure you are logged in to Azure CLI: `az login`
 2. Verify your Azure account has been granted access to the database (see Local Development Setup, Step 2)
 3. Check that your IP is allowed in SQL Server firewall rules
@@ -225,6 +256,7 @@ These are automatically set by the Bicep template during deployment.
 ## Monitoring
 
 Monitor your database in Azure Portal:
+
 1. Navigate to your SQL Database
 2. View metrics: DTU usage, storage, connections
 3. Set up alerts for high resource usage
@@ -233,6 +265,7 @@ Monitor your database in Azure Portal:
 ## Cost Management
 
 The template uses **Basic tier** by default:
+
 - 5 DTUs
 - 2 GB storage
 - ~$5/month

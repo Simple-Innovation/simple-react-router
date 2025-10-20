@@ -7,13 +7,44 @@
 #    az ad sp create-for-rbac --name "simple-react-router-deploy" --role contributor \
 #      --scopes /subscriptions/{subscription-id} --sdk-auth
 #
-# 2. Create the following secrets and repository variables in your repository (Settings > Secrets and variables > Actions):
+# 2. Grant the Service Principal "Directory Readers" role in Azure AD (REQUIRED for SQL Server setup):
+#    - Go to Azure Portal → Azure Active Directory → Roles and administrators
+#    - Search for "Directory Readers"
+#    - Click "Add assignments"
+#    - Search for your service principal name (e.g., "simple-react-router-deploy")
+#    - Add the assignment
+#    
+#    OR run this command as a Global Administrator or Privileged Role Administrator:
+#    
+#    # Get the service principal object ID
+#    SP_OBJECT_ID=$(az ad sp list --display-name "simple-react-router-deploy" --query "[0].id" -o tsv)
+#    
+#    # Get Directory Readers role ID
+#    ROLE_ID=$(az rest --method GET \
+#      --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+#      --query "value[?displayName=='Directory Readers'].id | [0]" -o tsv)
+#    
+#    # Assign the role
+#    az rest --method POST \
+#      --uri "https://graph.microsoft.com/v1.0/directoryRoles/${ROLE_ID}/members/\$ref" \
+#      --headers "Content-Type=application/json" \
+#      --body "{\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/${SP_OBJECT_ID}\"}"
+#
+#    Note: Without this permission, the workflow will attempt to grant the SQL Server's managed identity
+#    the Directory Readers role but will fail. You'll need to run the grant step manually with admin permissions.
+#
+# 3. Create the following secrets and repository variables in your repository (Settings > Secrets and variables > Actions):
 #    - AZURE_CREDENTIALS (secret): The entire JSON output from step 1
 #    - SQL_ADMIN_PASSWORD (secret): A secure password for SQL Server admin (min 8 chars, uppercase, lowercase, numbers, symbols)
 #    - AZURE_SUBSCRIPTION_ID (repository Variable): Your Azure subscription ID
 #    - AZURE_RESOURCE_GROUP_NAME (repository Variable): Name of the resource group to create/use (e.g., 'simple-react-router-rg')
 #
-# 3. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
+# 4. Optionally, configure Azure AD administrator for SQL Server (if you want a specific user instead of auto-detection):
+#    - SQL_AZUREAD_ADMIN_USER (repository Variable): Azure AD admin user email or service principal name
+#    - SQL_AZUREAD_ADMIN_OBJECT_ID (repository Variable): Object ID of the Azure AD admin user
+#    Note: Both variables must be provided together. If not provided, the current logged-in user (service principal) will be used.
+#
+# 5. Optionally, change the AZURE_WEBAPP_NAME, AZURE_LOCATION, and other environment variables below.
 #
 # For more information on GitHub Actions for Azure: https://github.com/Azure/Actions
 # For more information on the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
@@ -23,8 +54,7 @@ name: Deploy to Azure Web App
 
 on:
   push:
-    branches:
-      - main
+    # Runs on push to any branch
   workflow_dispatch:
     # Allows manual deployment from any branch
 
@@ -193,6 +223,84 @@ jobs:
             sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
           failOnStdErr: false
 
+      - name: Grant SQL Server Directory Readers Role
+        run: |
+          echo "::group::Grant Directory Readers Role to SQL Server"
+          echo "Granting SQL Server's managed identity the Directory Readers role in Azure AD..."
+          echo "This is required for SQL Server to resolve other Azure AD principals."
+          echo ""
+          echo "Note: This step requires the service principal to have sufficient Azure AD permissions."
+          echo "      If this step fails, ask your Azure AD administrator to run:"
+          echo "      ./scripts/grant-sql-directory-reader.sh ${{ env.AZURE_RESOURCE_GROUP_NAME }} ${{ steps.deploy-infra.outputs.sqlServerName }}"
+          echo ""
+          
+          bash ./scripts/grant-sql-directory-reader.sh \
+            "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+            "${{ steps.deploy-infra.outputs.sqlServerName }}" || {
+              echo "::warning title=Directory Readers Grant Failed::Failed to grant Directory Readers role automatically."
+              echo "::warning::This may be due to insufficient Azure AD permissions for the service principal."
+              echo "::warning::You may need to run this step manually with elevated permissions:"
+              echo "::warning::  ./scripts/grant-sql-directory-reader.sh ${{ env.AZURE_RESOURCE_GROUP_NAME }} ${{ steps.deploy-infra.outputs.sqlServerName }}"
+              echo "::warning::After running manually, re-run this workflow or continue with the remaining steps."
+              echo ""
+              echo "Checking if Directory Readers role is already assigned..."
+              
+              # Check if already configured
+              SQL_PRINCIPAL_ID=$(az sql server show \
+                --resource-group "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+                --name "${{ steps.deploy-infra.outputs.sqlServerName }}" \
+                --query identity.principalId \
+                --output tsv)
+              
+              if [ -n "$SQL_PRINCIPAL_ID" ]; then
+                echo "SQL Server Principal ID: $SQL_PRINCIPAL_ID"
+                
+                # Try to check if already a member
+                IS_MEMBER=$(az rest \
+                  --method GET \
+                  --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+                  --headers "Content-Type=application/json" \
+                  --query "value[?displayName=='Directory Readers'].members[?id=='$SQL_PRINCIPAL_ID'].id | [0]" \
+                  --output tsv 2>/dev/null || echo "")
+                
+                if [ -n "$IS_MEMBER" ]; then
+                  echo "::notice title=Already Configured::SQL Server already has Directory Readers role, continuing..."
+                else
+                  echo "::error title=Manual Intervention Required::SQL Server does not have Directory Readers role and automatic grant failed."
+                  echo "::error::Please run the script manually with admin permissions, then re-run this workflow."
+                  exit 1
+                fi
+              else
+                echo "::error title=Cannot Verify::Could not retrieve SQL Server principal ID to verify Directory Readers role."
+                exit 1
+              fi
+          }
+          echo "::endgroup::"
+
+      - name: Wait for Directory Readers propagation
+        run: |
+          echo "Waiting 60 seconds for Directory Readers role assignment to propagate in Azure AD..."
+          sleep 60
+
+      - name: Configure Azure AD Administrator for SQL Server
+        run: |
+          echo "Configuring Azure AD administrator for SQL Server..."
+          bash ./scripts/configure-azuread-admin.sh \
+            "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+            "${{ steps.deploy-infra.outputs.sqlServerName }}" \
+            "${{ vars.SQL_AZUREAD_ADMIN_USER || '' }}" \
+            "${{ vars.SQL_AZUREAD_ADMIN_OBJECT_ID || '' }}"
+
+      - name: Wait for Azure AD Admin configuration to propagate
+        run: |
+          echo "Waiting 60 seconds for Azure AD administrator configuration to propagate..."
+          sleep 60
+
+      - name: Install SQL Server Tools
+        run: |
+          echo "Installing SQL Server command-line tools..."
+          bash ./scripts/install-sqlcmd.sh
+
       - name: Configure Managed Identity Database Access
         run: |
           echo "Configuring managed identity access to SQL Database..."
@@ -200,9 +308,15 @@ jobs:
             "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
             "${{ steps.deploy-infra.outputs.sqlServerName }}" \
             "${{ steps.deploy-infra.outputs.sqlDatabaseName }}" \
-            "${{ steps.deploy-infra.outputs.webAppName }}" \
-            "sqladmin" \
-            "${{ secrets.SQL_ADMIN_PASSWORD }}"
+            "${{ steps.deploy-infra.outputs.webAppName }}"
+
+      - name: Initialize Database Schema
+        run: |
+          echo "Initializing database schema and sample data..."
+          bash ./scripts/initialize-database.sh \
+            "${{ env.AZURE_RESOURCE_GROUP_NAME }}" \
+            "${{ steps.deploy-infra.outputs.sqlServerName }}" \
+            "${{ steps.deploy-infra.outputs.sqlDatabaseName }}"
 
       - name: Azure Logout
         if: always()
@@ -251,6 +365,71 @@ jobs:
           done
           
           echo "::error title=Health Check Failed::Health endpoint at ${HEALTH_URL} did not respond with 200 OK after ${MAX_RETRIES} attempts"
+          exit 1
+
+      - name: Test database initialization
+        run: |
+          set -euo pipefail
+          WEBAPP_URL="${{ needs.deploy.outputs.webapp-url }}"
+          USERS_URL="${WEBAPP_URL}/api/users"
+          
+          echo "Testing database initialization at: ${USERS_URL}"
+          echo "Waiting 10 seconds for database to be ready..."
+          sleep 10
+          
+          # Try up to 5 times with 10 second intervals
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT + 1)) of ${MAX_RETRIES}..."
+            
+            # Capture both response body and HTTP status code
+            RESPONSE=$(curl -s -w "\n%{http_code}" "${USERS_URL}")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+            
+            echo "HTTP Status: ${HTTP_CODE}"
+            echo "Response Body:"
+            echo "${BODY}"
+            
+            # Check if we got a successful response
+            if [ "$HTTP_CODE" = "200" ]; then
+              # Verify the response is valid JSON and contains data
+              if echo "$BODY" | jq empty 2>/dev/null; then
+                USER_COUNT=$(echo "$BODY" | jq '. | length' 2>/dev/null || echo "0")
+                echo "✓ Database is initialized with ${USER_COUNT} users"
+                
+                if [ "$USER_COUNT" -gt 0 ]; then
+                  echo "✓ Database contains sample data"
+                  exit 0
+                else
+                  echo "⚠ Warning: Database is initialized but contains no users"
+                  exit 0
+                fi
+              else
+                echo "✗ Response is not valid JSON"
+              fi
+            elif [ "$HTTP_CODE" = "503" ]; then
+              ERROR_MSG=$(echo "$BODY" | jq -r '.error' 2>/dev/null || echo "$BODY")
+              if [[ "$ERROR_MSG" == *"Database not initialized"* ]]; then
+                echo "Database not yet initialized, will retry..."
+              else
+                echo "Service unavailable: $ERROR_MSG"
+              fi
+            else
+              echo "Unexpected HTTP status code: ${HTTP_CODE}"
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Database not ready yet, waiting 10 seconds..."
+              sleep 10
+            fi
+          done
+          
+          echo "::error title=Database Initialization Failed::Database at ${USERS_URL} was not initialized after ${MAX_RETRIES} attempts"
+          echo "::error::The /api/users endpoint should return a 200 status with user data, but it did not."
           exit 1
 
   build:

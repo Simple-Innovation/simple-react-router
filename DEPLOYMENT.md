@@ -110,6 +110,112 @@ az account show --query id --output tsv
 
 The command will output JSON credentials. **Save this entire JSON output** - you'll need it in the next step.
 
+### 1b. Grant Microsoft Graph API Permissions to Service Principal (REQUIRED)
+
+**CRITICAL:** The service principal needs **Microsoft Graph API permissions** to grant the SQL Server's managed identity the Directory Readers role during automated deployment.
+
+#### Required Permission
+
+Your service principal needs this **Application permission** from Microsoft Graph:
+
+- **`RoleManagement.ReadWrite.Directory`**
+
+This allows the deployment workflow to:
+
+- Read and activate directory role templates
+- Grant the Directory Readers role to SQL Server's managed identity
+- Verify role assignments
+
+#### Grant the Permission
+
+You have three options:
+
+##### Option A: Automated Script (Recommended)
+
+Run the helper script as a **Global Administrator** or **Application Administrator**:
+
+```bash
+./scripts/grant-sp-graph-permissions.sh 66868a16-6798-455c-bb79-f53a52e8fa16
+```
+
+Replace the App ID with your service principal's client ID from step 1.
+
+##### Option B: Azure Portal (Visual)
+
+1. Go to [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations**
+2. Find your service principal app (search by name or App ID)
+3. Click **API permissions** → **Add a permission**
+4. Select **Microsoft Graph** → **Application permissions**
+5. Search for and add: **`RoleManagement.ReadWrite.Directory`**
+6. Click **Grant admin consent for [Your Organization]** ⚠️ (Requires Global Admin or Privileged Role Admin)
+7. Verify the permission shows a green checkmark under "Status"
+
+##### Option C: Azure CLI (Fast)
+
+Run these commands as a **Global Administrator** or **Application Administrator**:
+
+```bash
+# Your service principal App ID (from step 1)
+SP_APP_ID="your-service-principal-app-id"
+
+# Get the service principal object ID
+SP_OBJECT_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv)
+
+# Get Microsoft Graph service principal ID
+GRAPH_SP_ID=$(az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].id" -o tsv)
+
+# Get the RoleManagement.ReadWrite.Directory permission ID
+ROLE_PERMISSION_ID=$(az ad sp show --id "$GRAPH_SP_ID" --query "appRoles[?value=='RoleManagement.ReadWrite.Directory'].id | [0]" -o tsv)
+
+# Grant the permission
+az rest \
+  --method POST \
+  --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$SP_OBJECT_ID/appRoleAssignments" \
+  --headers "Content-Type=application/json" \
+  --body "{
+    \"principalId\": \"$SP_OBJECT_ID\",
+    \"resourceId\": \"$GRAPH_SP_ID\",
+    \"appRoleId\": \"$ROLE_PERMISSION_ID\"
+  }"
+
+echo "✓ Permission granted successfully!"
+echo "⏱️  Wait 5-10 minutes for permission propagation before running the workflow."
+```
+
+#### Verification
+
+After granting the permission, verify it was applied:
+
+```bash
+SP_APP_ID="your-service-principal-app-id"
+SP_OBJECT_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv)
+
+az rest \
+  --method GET \
+  --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$SP_OBJECT_ID/appRoleAssignments" \
+  --query "value[?resourceDisplayName=='Microsoft Graph'].{Permission:appRoleId, Resource:resourceDisplayName}"
+```
+
+You should see the `RoleManagement.ReadWrite.Directory` permission listed.
+
+#### 📚 Detailed Guide
+
+For more detailed information, troubleshooting, and alternative methods, see:
+
+- **[GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md](GRANT_SERVICE_PRINCIPAL_PERMISSIONS.md)** - Complete guide with screenshots and troubleshooting
+
+#### Why is this needed?
+
+The GitHub Actions workflow will automatically:
+
+1. Deploy SQL Server with a managed identity (via Bicep)
+2. Grant that SQL Server's identity the Directory Readers role (via script)
+3. Configure Azure AD authentication
+
+Without Directory Readers permission, step 2 will fail and you'll need to manually run the grant script with admin permissions.
+
+See [WHY_NOT_BICEP.md](WHY_NOT_BICEP.md) for a detailed explanation of why this can't be automated in Bicep.
+
 ### Authenticate the GitHub CLI (`gh`) using a Personal Access Token (PAT)
 
 If you want the helper script to upload secrets automatically (`--set-secrets`), `gh` must be authenticated with a token that has permission to manage Actions secrets for the repository. There are two common token types:
@@ -289,6 +395,266 @@ The GitHub Actions workflow (`.github/workflows/azure-webapps-deploy.yml`) perfo
 - **`infrastructure/main.bicep`**: Bicep template for Azure infrastructure (App Service Plan and Web App)
 - **`ui/web.config`**: IIS configuration for Azure App Service (handles SPA routing)
 - **`vite.config.ts`**: Vite configuration that includes plugin to copy web.config to build output
+
+## Post-Deployment: Setting Up Microsoft Entra Authentication for SQL Database
+
+After the infrastructure deployment completes, you need to configure Microsoft Entra (Azure AD) authentication for the SQL Database. The application uses the Web App's **Managed Identity** to connect to SQL Server, which provides a secure, password-less authentication method.
+
+**⚠️ CRITICAL:** This is a **required** post-deployment step. The application will not work without it.
+
+### Why This Step is Necessary
+
+The Bicep template automatically configures:
+
+1. ✓ SQL Server with a system-assigned managed identity
+2. ✓ SQL Server with both SQL authentication and support for Azure AD
+3. ✓ Web App with a system-assigned managed identity
+
+However, the following steps **cannot** be automated in Bicep and must be done manually:
+
+4. ✗ Grant SQL Server's identity the "Directory Readers" role in Azure AD
+5. ✗ Configure an Azure AD administrator for the SQL Server
+6. ✗ Create a database user for the web app's managed identity
+
+**Why can't this be automated?** The Directory Readers role assignment requires Azure AD Graph API calls (not ARM) and special Azure AD admin permissions that are separate from Azure subscription permissions.
+
+### Complete Setup Process
+
+Follow these three steps **in order** after deployment. See [SQL_SERVER_AZURE_AD_SETUP.md](SQL_SERVER_AZURE_AD_SETUP.md) for detailed explanations.
+
+#### Prerequisites
+
+- Azure CLI installed and logged in (`az login`)
+- **Global Administrator** or **Privileged Role Administrator** role in Azure AD (for Step 1 only)
+- SQL Server command-line tools installed (for Step 3) - run `./scripts/install-sqlcmd.sh`
+
+#### Step 1: Grant Directory Readers Role to SQL Server (Requires Azure AD Admin)
+
+**This step requires Global Administrator or Privileged Role Administrator permissions.**
+
+```bash
+./scripts/grant-sql-directory-reader.sh <resource-group> <sql-server-name>
+
+# Example:
+./scripts/grant-sql-directory-reader.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql
+```
+
+This grants the SQL Server's managed identity the ability to resolve other Azure AD principals.
+
+**If you don't have these permissions:** Ask your Azure AD administrator to run this script or manually grant the "Directory Readers" role to the SQL Server's managed identity.
+
+#### Step 2: Configure Azure AD Administrator (Wait 5-10 minutes after Step 1)
+
+```bash
+./scripts/configure-azuread-admin.sh <resource-group> <sql-server-name>
+
+# Example (using current logged-in user):
+./scripts/configure-azuread-admin.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql
+
+# Or specify a specific user:
+./scripts/configure-azuread-admin.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql \
+  admin@example.com \
+  12345678-1234-1234-1234-123456789012
+```
+
+This enables Azure AD authentication on the SQL Server.
+
+#### Step 3: Grant Managed Identity Database Access (Wait 5-10 minutes after Step 2)
+
+```bash
+./scripts/configure-managed-identity.sh <resource-group> <sql-server> <database> <web-app-name>
+
+# Example:
+./scripts/configure-managed-identity.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql \
+  UsersDB \
+  simple-react-router-web
+```
+
+This creates a database user for the web app's managed identity and grants permissions.
+
+#### Step 4: Initialize Database Schema
+
+```bash
+./scripts/initialize-database.sh <resource-group> <sql-server> <database> <web-app-name>
+
+# Example:
+./scripts/initialize-database.sh \
+  simple-react-router-rg \
+  simple-react-router-abc123-sql \
+  UsersDB \
+  simple-react-router-web
+```
+
+This creates the `Users` table needed by the application.
+
+### Complete Example
+
+Here's the complete sequence with wait times:
+
+```bash
+# Set your values (get these from Azure deployment outputs)
+RESOURCE_GROUP="simple-react-router-rg"
+SQL_SERVER="simple-react-router-abc123-sql"  # Without .database.windows.net
+DATABASE_NAME="UsersDB"
+WEB_APP_NAME="simple-react-router-web"
+
+# Step 1: Grant Directory Readers (requires Azure AD admin permissions)
+./scripts/grant-sql-directory-reader.sh "$RESOURCE_GROUP" "$SQL_SERVER"
+
+# Wait for Azure AD changes to propagate
+echo "Waiting 60 seconds for Azure AD to propagate..."
+sleep 60
+
+# Step 2: Configure Azure AD admin
+./scripts/configure-azuread-admin.sh "$RESOURCE_GROUP" "$SQL_SERVER"
+
+# Wait for configuration to propagate
+echo "Waiting 60 seconds for Azure AD admin configuration to propagate..."
+sleep 60
+
+# Step 3: Grant managed identity access
+./scripts/configure-managed-identity.sh "$RESOURCE_GROUP" "$SQL_SERVER" "$DATABASE_NAME" "$WEB_APP_NAME"
+
+# Step 4: Initialize database
+./scripts/initialize-database.sh "$RESOURCE_GROUP" "$SQL_SERVER" "$DATABASE_NAME" "$WEB_APP_NAME"
+
+echo "Setup complete!"
+```
+
+### What If I Get Errors?
+
+#### "Principal could not be resolved" Error
+
+**Full error:** `Principal 'simple-react-router-web' could not be resolved. Error message: 'Server identity is not configured...'`
+
+**Cause:** SQL Server doesn't have Directory Readers role.
+
+**Solution:** Run Step 1 (`grant-sql-directory-reader.sh`) and wait 5-10 minutes before proceeding.
+
+#### "You do not have permission to grant Directory Readers"
+
+**Cause:** You lack Azure AD admin permissions.
+
+**Solution:** Ask your Global Administrator or Privileged Role Administrator to run Step 1 for you.
+
+#### "Failed to create user"
+
+**Cause:** Azure AD admin not configured or changes haven't propagated.
+
+**Solution:**
+
+- Verify Step 2 completed successfully
+- Wait 5-10 minutes
+- Retry Step 3
+
+See [SQL_SERVER_AZURE_AD_SETUP.md](SQL_SERVER_AZURE_AD_SETUP.md) for detailed troubleshooting.
+
+### Old Option: Manual Configuration (Not Recommended)
+
+If you prefer to configure manually or the script fails:
+
+#### Step 1: Get the Web App's Managed Identity
+
+```bash
+# Get the Web App name from your deployment outputs
+WEBAPP_NAME="your-web-app-name"
+RESOURCE_GROUP="your-resource-group"
+
+# Get the principal ID
+az webapp identity show \
+  --name $WEBAPP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query principalId -o tsv
+```
+
+#### Step 2: Set as Azure AD Admin
+
+```bash
+SQL_SERVER_NAME="your-sql-server-name"
+
+az sql server ad-admin create \
+  --resource-group $RESOURCE_GROUP \
+  --server-name $SQL_SERVER_NAME \
+  --display-name $WEBAPP_NAME \
+  --object-id <principal-id-from-step-1>
+```
+
+#### Step 3: Create Database User
+
+Connect to the SQL Database using Azure AD authentication (via Azure Portal Query Editor, Azure Data Studio, or SSMS) and run:
+
+```sql
+-- Create user for the managed identity
+CREATE USER [your-web-app-name] FROM EXTERNAL PROVIDER;
+
+-- Grant necessary permissions
+ALTER ROLE db_datareader ADD MEMBER [your-web-app-name];
+ALTER ROLE db_datawriter ADD MEMBER [your-web-app-name];
+ALTER ROLE db_ddladmin ADD MEMBER [your-web-app-name];
+```
+
+#### Step 4: Restart the Web App
+
+```bash
+az webapp restart \
+  --name $WEBAPP_NAME \
+  --resource-group $RESOURCE_GROUP
+```
+
+### Verifying the Configuration
+
+1. Check the Web App logs in Azure Portal:
+
+   - Navigate to your Web App → Monitoring → Log stream
+   - Look for "Database connection pool established" message
+   - If you see errors like "The server is not currently configured to accept this token", the authentication setup is incomplete
+
+2. Test the API endpoints:
+
+   ```bash
+   # Health check
+   curl https://your-web-app.azurewebsites.net/api/health
+
+   # Get users (should work after successful setup)
+   curl https://your-web-app.azurewebsites.net/api/users
+   ```
+
+### Common Issues with Microsoft Entra Authentication
+
+#### "Login failed for user '&lt;token-identified principal&gt;'"
+
+This error means the SQL Server can't validate the Azure AD token. Solutions:
+
+- Ensure the Web App is set as an Azure AD administrator on the SQL Server
+- Verify the database user was created: `CREATE USER [webapp-name] FROM EXTERNAL PROVIDER`
+- Check that the Web App has a system-assigned managed identity enabled
+- Restart the Web App after making changes
+
+#### "The server is not currently configured to accept this token"
+
+This typically means:
+
+- The Azure AD admin is not configured on the SQL Server
+- The SQL Server firewall is blocking connections
+- Run the setup script or manually configure as described above
+
+#### Database User Already Exists Error
+
+If you see "User already exists" when running the CREATE USER command, it means the user was already created. Just grant the permissions:
+
+```sql
+ALTER ROLE db_datareader ADD MEMBER [your-web-app-name];
+ALTER ROLE db_datawriter ADD MEMBER [your-web-app-name];
+ALTER ROLE db_ddladmin ADD MEMBER [your-web-app-name];
+```
 
 ## Troubleshooting
 

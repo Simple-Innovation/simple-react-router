@@ -1,0 +1,250 @@
+#!/bin/bash
+# Script to grant Directory Reader role to SQL Server's managed identity
+# This is required for SQL Server to resolve Azure AD principals (like the web app's managed identity)
+
+set -euo pipefail
+
+# Parameters
+RESOURCE_GROUP="${1:-}"
+SQL_SERVER="${2:-}"
+
+# Validate required parameters
+if [[ -z "$RESOURCE_GROUP" || -z "$SQL_SERVER" ]]; then
+    echo "Usage: $0 <resource-group> <sql-server>"
+    echo ""
+    echo "Parameters:"
+    echo "  resource-group:    Azure resource group name"
+    echo "  sql-server:        SQL Server name (without .database.windows.net)"
+    echo ""
+    echo "This script grants the SQL Server's managed identity the 'Directory Readers' role"
+    echo "in Azure AD, which is required for the SQL Server to resolve other Azure AD principals."
+    echo ""
+    echo "Note: You must be logged in as a Global Administrator or Privileged Role Administrator"
+    echo "      to grant Directory Readers role."
+    exit 1
+fi
+
+echo "============================================"
+echo "Granting Directory Readers Role to SQL Server"
+echo "============================================"
+echo "Resource Group: $RESOURCE_GROUP"
+echo "SQL Server: $SQL_SERVER"
+echo "============================================"
+echo ""
+
+# Check if user has sufficient permissions
+echo "Checking your Azure AD authentication..."
+
+# Try to get the current user/service principal ID
+# For interactive login (user): use 'az ad signed-in-user show'
+# For service principal: use 'az account show'
+CURRENT_USER_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+
+if [[ -z "$CURRENT_USER_ID" ]]; then
+    # Might be a service principal - try to get SP info
+    echo "Not signed in as a user, checking if logged in as service principal..."
+    
+    SP_APP_ID=$(az account show --query user.name -o tsv 2>/dev/null || echo "")
+    
+    if [[ -n "$SP_APP_ID" ]]; then
+        # Get the service principal object ID from the app ID
+        CURRENT_USER_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv 2>/dev/null || echo "")
+        
+        if [[ -n "$CURRENT_USER_ID" ]]; then
+            echo "Logged in as service principal: $SP_APP_ID"
+            echo "Service principal object ID: $CURRENT_USER_ID"
+        fi
+    fi
+fi
+
+if [[ -z "$CURRENT_USER_ID" ]]; then
+    echo "ERROR: Could not determine current user or service principal ID"
+    echo "Make sure you are logged in with 'az login' or 'az login --service-principal'"
+    exit 1
+fi
+
+echo "Authenticated principal ID: $CURRENT_USER_ID"
+
+# Get the SQL Server's managed identity principal ID
+echo ""
+echo "Retrieving SQL Server's managed identity..."
+SQL_PRINCIPAL_ID=$(az sql server show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$SQL_SERVER" \
+    --query identity.principalId \
+    --output tsv 2>/dev/null || echo "")
+
+if [[ -z "$SQL_PRINCIPAL_ID" ]]; then
+    echo "ERROR: Could not retrieve SQL Server's managed identity principal ID"
+    echo "Make sure the SQL Server has a system-assigned managed identity enabled."
+    echo ""
+    echo "You can enable it with:"
+    echo "  az sql server update --resource-group $RESOURCE_GROUP --name $SQL_SERVER --identity-type SystemAssigned"
+    exit 1
+fi
+
+echo "SQL Server Principal ID: $SQL_PRINCIPAL_ID"
+
+# Get the Directory Readers role ID
+echo ""
+echo "Looking up Directory Readers role..."
+DIRECTORY_READERS_ROLE_ID=$(az rest \
+    --method GET \
+    --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+    --headers "Content-Type=application/json" \
+    --query "value[?displayName=='Directory Readers'].id | [0]" \
+    --output tsv 2>/dev/null || echo "")
+
+if [[ -z "$DIRECTORY_READERS_ROLE_ID" ]]; then
+    echo "WARNING: Directory Readers role not found in active roles"
+    echo "Attempting to activate the Directory Readers role template..."
+    
+    # Get the Directory Readers role template ID
+    ROLE_TEMPLATE_ID=$(az rest \
+        --method GET \
+        --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
+        --headers "Content-Type=application/json" \
+        --query "value[?displayName=='Directory Readers'].id | [0]" \
+        --output tsv 2>/dev/null || echo "")
+
+    # If not found by exact match, try a fuzzy, case-insensitive search using Python
+    if [[ -z "$ROLE_TEMPLATE_ID" ]]; then
+        echo "Directory Readers template not found by exact name - trying fuzzy search (case-insensitive)..."
+        ROLE_TEMPLATE_ID=$(az rest \
+            --method GET \
+            --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
+            --headers "Content-Type=application/json" \
+            --output json 2>/dev/null || echo "{}" | python3 - <<'PY'
+import sys, json
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+for item in data.get('value', []):
+    name = item.get('displayName', '')
+    if 'directory' in name.lower() and 'read' in name.lower():
+        print(item.get('id',''))
+        sys.exit(0)
+print('')
+PY
+)
+    fi
+
+    if [[ -z "$ROLE_TEMPLATE_ID" ]]; then
+        echo "ERROR: Could not find Directory Readers role template (exact or fuzzy search)"
+        echo "Listing available role templates (displayName -> id) for diagnostics:"
+        # Try to print a user-friendly table of role templates
+        az rest \
+            --method GET \
+            --uri "https://graph.microsoft.com/v1.0/directoryRoleTemplates" \
+            --headers "Content-Type=application/json" \
+            --output json 2>/dev/null | python3 - <<'PY'
+import sys,json
+try:
+    j=json.load(sys.stdin)
+except Exception:
+    j={}
+for v in j.get('value',[])[:200]:
+    print(f"{v.get('displayName','<no-name>')} -> {v.get('id','')}")
+PY
+
+        echo ""
+        echo "Manual activation steps you can ask an Azure AD administrator to run:"
+        echo "  1. Find the role template ID from the list above (the line with 'Directory Readers')"
+        echo "  2. Activate the role with the following command (requires Azure AD admin):"
+        echo "     az rest --method POST --uri 'https://graph.microsoft.com/v1.0/directoryRoles' --headers 'Content-Type=application/json' --body \"{\\\"roleTemplateId\\\": \\\"<ROLE_TEMPLATE_ID>\\\"}\""
+        echo "  3. Wait a minute and re-run this script"
+        echo ""
+        echo "If you don't see a candidate named 'Directory Readers' in the list above, your tenant may have restricted role templates or the Graph API access scope for the current credentials is limited. Please have an Azure AD administrator review available roles in the portal and activate the 'Directory Readers' role template if needed."
+        exit 1
+    fi
+
+    echo "Directory Readers template ID: $ROLE_TEMPLATE_ID"
+    echo "Activating Directory Readers role..."
+
+    # Activate the role
+    az rest \
+        --method POST \
+        --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+        --headers "Content-Type=application/json" \
+        --body "{\"roleTemplateId\": \"$ROLE_TEMPLATE_ID\"}" \
+        --output none 2>/dev/null || {
+            echo "WARNING: Could not activate Directory Readers role (it may already be active or you may lack permissions)"
+        }
+
+    # Try to get the role ID again
+    DIRECTORY_READERS_ROLE_ID=$(az rest \
+        --method GET \
+        --uri "https://graph.microsoft.com/v1.0/directoryRoles" \
+        --headers "Content-Type=application/json" \
+        --query "value[?displayName=='Directory Readers'].id | [0]" \
+        --output tsv 2>/dev/null || echo "")
+
+    if [[ -z "$DIRECTORY_READERS_ROLE_ID" ]]; then
+        echo "ERROR: Could not get Directory Readers role ID even after activation attempt"
+        echo "This may be due to insufficient Graph API permissions for the current principal."
+        echo "Ask an Azure AD administrator to activate the 'Directory Readers' role template and/or run this script with elevated permissions."
+        exit 1
+    fi
+fi
+
+echo "Directory Readers role ID: $DIRECTORY_READERS_ROLE_ID"
+
+# Check if the SQL Server is already a member of Directory Readers
+echo ""
+echo "Checking if SQL Server is already a Directory Reader..."
+IS_MEMBER=$(az rest \
+    --method GET \
+    --uri "https://graph.microsoft.com/v1.0/directoryRoles/${DIRECTORY_READERS_ROLE_ID}/members" \
+    --headers "Content-Type=application/json" \
+    --query "value[?id=='$SQL_PRINCIPAL_ID'].id | [0]" \
+    --output tsv 2>/dev/null || echo "")
+
+if [[ -n "$IS_MEMBER" ]]; then
+    echo "✓ SQL Server is already a member of Directory Readers role"
+    echo ""
+    echo "============================================"
+    echo "✓ No action needed - already configured!"
+    echo "============================================"
+    exit 0
+fi
+
+# Grant Directory Readers role to SQL Server
+echo ""
+echo "Granting Directory Readers role to SQL Server..."
+az rest \
+    --method POST \
+    --uri "https://graph.microsoft.com/v1.0/directoryRoles/${DIRECTORY_READERS_ROLE_ID}/members/\$ref" \
+    --headers "Content-Type=application/json" \
+    --body "{\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/${SQL_PRINCIPAL_ID}\"}" \
+    --output none
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "============================================"
+    echo "✓ Directory Readers role granted successfully!"
+    echo "============================================"
+    echo ""
+    echo "The SQL Server can now resolve Azure AD principals."
+    echo "You can proceed with configuring the managed identity access."
+    echo ""
+    echo "Next steps:"
+    echo "  1. Run: ./scripts/configure-azuread-admin.sh $RESOURCE_GROUP $SQL_SERVER"
+    echo "  2. Run: ./scripts/configure-managed-identity.sh $RESOURCE_GROUP $SQL_SERVER <database-name> <web-app-name>"
+else
+    echo ""
+    echo "============================================"
+    echo "✗ ERROR: Failed to grant Directory Readers role"
+    echo "============================================"
+    echo ""
+    echo "Common causes:"
+    echo "  1. Insufficient permissions - you need Global Administrator or Privileged Role Administrator"
+    echo "  2. Your account doesn't have permission to manage directory roles"
+    echo ""
+    echo "Ask your Azure AD administrator to either:"
+    echo "  - Grant you the 'Privileged Role Administrator' role temporarily"
+    echo "  - Run this script for you"
+    echo "  - Grant the Directory Readers role manually to principal ID: $SQL_PRINCIPAL_ID"
+    echo ""
+    exit 1
+fi
